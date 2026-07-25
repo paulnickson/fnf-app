@@ -10,6 +10,7 @@ const FNFApp = () => {
   const [newPlayerName, setNewPlayerName] = useState('');
   const [expandedSession, setExpandedSession] = useState(null);
   const [copiedMessage, setCopiedMessage] = useState(false);
+  const [playerFilter, setPlayerFilter] = useState('all');
   const [settings, setSettings] = useState({ playerFee: 8, pitchCost: 104 });
   const [settingsDraft, setSettingsDraft] = useState({ playerFee: 8, pitchCost: 104 });
   const [settingsSaved, setSettingsSaved] = useState(false);
@@ -329,6 +330,7 @@ const FNFApp = () => {
         {/* Players Tab */}
         {activeTab === 'players' && (
           <div className="space-y-3">
+            {/* Add player */}
             <div className="flex gap-2">
               {!showNewPlayer ? (
                 <button
@@ -354,22 +356,60 @@ const FNFApp = () => {
               )}
             </div>
 
-            {players.map(player => (
-              <div key={player.id} className="bg-white p-4 rounded-lg shadow-sm flex items-center justify-between">
-                <div>
-                  <p className="font-semibold text-gray-900">{player.name}</p>
-                  <p className={`text-sm ${player.balance < 0 ? 'text-orange-600 font-medium' : 'text-gray-600'}`}>
-                    {player.balance < 0 ? `Owes £${Math.abs(player.balance)}` : player.balance === 0 ? 'Up to date' : `Credit £${player.balance}`}
-                  </p>
-                </div>
+            {/* Filter buttons */}
+            <div className="flex rounded-lg overflow-hidden border border-gray-200 bg-white shadow-sm">
+              {[
+                { id: 'all', label: `All (${players.length})` },
+                { id: 'owes', label: `Owes (${players.filter(p => p.balance < 0).length})` },
+                { id: 'credit', label: `Credit (${players.filter(p => p.balance > 0).length})` },
+              ].map(f => (
                 <button
-                  onClick={() => setPlayers(players.filter(p => p.id !== player.id))}
-                  className="text-gray-400 hover:text-red-600 transition"
+                  key={f.id}
+                  onClick={() => setPlayerFilter(f.id)}
+                  className={`flex-1 py-2 text-sm font-medium transition ${
+                    playerFilter === f.id
+                      ? 'bg-green-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  }`}
                 >
-                  <Trash2 size={18} />
+                  {f.label}
                 </button>
-              </div>
-            ))}
+              ))}
+            </div>
+
+            {/* Player list — alphabetical, filtered */}
+            {[...players]
+              .filter(p => {
+                if (playerFilter === 'owes') return p.balance < 0;
+                if (playerFilter === 'credit') return p.balance > 0;
+                return true;
+              })
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map(player => (
+                <div key={player.id} className="bg-white p-4 rounded-lg shadow-sm flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold text-gray-900">{player.name}</p>
+                    <p className={`text-sm ${player.balance < 0 ? 'text-orange-600 font-medium' : player.balance > 0 ? 'text-blue-600 font-medium' : 'text-gray-500'}`}>
+                      {player.balance < 0 ? `Owes £${Math.abs(player.balance)}` : player.balance === 0 ? 'Up to date' : `Credit £${player.balance}`}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setPlayers(players.filter(p => p.id !== player.id))}
+                    className="text-gray-400 hover:text-red-600 transition"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              ))
+            }
+
+            {players.filter(p => {
+              if (playerFilter === 'owes') return p.balance < 0;
+              if (playerFilter === 'credit') return p.balance > 0;
+              return false;
+            }).length === 0 && playerFilter !== 'all' && (
+              <p className="text-center text-gray-400 py-6 text-sm">No players in this category</p>
+            )}
           </div>
         )}
 
