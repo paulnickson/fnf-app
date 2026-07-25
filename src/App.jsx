@@ -151,17 +151,16 @@ const FNFApp = () => {
     const attendeeCount = attendanceVals.filter(a => a.attended).length;
     const unpaidCount = attendanceVals.filter(a => a.attended && !a.paid).length;
     const collected = attendeeCount * settings.playerFee;
-    const net = collected - settings.pitchCost;
 
     setSessions(sessions.map(s =>
       s.id === sessionId
-        ? { ...s, status: 'closed', collected, pitchCost: settings.pitchCost, netAmount: net, attendeeCount }
+        ? { ...s, status: 'closed', collected, attendeeCount }
         : s
     ));
 
     setBankBalance(prev => {
-      const newBalance = prev + net;
-      setCloseModal({ collected, pitchCost: settings.pitchCost, net, newBalance, attendeeCount, unpaidCount });
+      const newBalance = prev + collected;
+      setCloseModal({ collected, newBalance, attendeeCount, unpaidCount, playerFee: settings.playerFee });
       return newBalance;
     });
 
@@ -568,9 +567,7 @@ const FNFApp = () => {
                   </div>
                   {session.status === 'closed' && (
                     <div className="text-right">
-                      <p className={`font-semibold ${session.netAmount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {session.netAmount >= 0 ? '+' : ''}£{session.netAmount}
-                      </p>
+                      <p className="font-semibold text-green-600">£{session.collected}</p>
                       <p className="text-xs text-gray-400">{session.attendeeCount} players</p>
                     </div>
                   )}
@@ -582,18 +579,10 @@ const FNFApp = () => {
                     ) : (
                       <div className="space-y-3">
                         {session.collected !== undefined && (
-                          <div className="text-sm bg-white rounded p-3 border border-gray-200 space-y-1">
-                            <div className="flex justify-between text-gray-700">
-                              <span>Collected ({session.attendeeCount} × £{session.collected / session.attendeeCount})</span>
+                          <div className="text-sm bg-white rounded p-3 border border-gray-200">
+                            <div className="flex justify-between font-semibold text-green-700">
+                              <span>Transferred to bank ({session.attendeeCount} × £{Math.round(session.collected / session.attendeeCount)})</span>
                               <span>£{session.collected}</span>
-                            </div>
-                            <div className="flex justify-between text-gray-700">
-                              <span>Pitch cost</span>
-                              <span>−£{session.pitchCost}</span>
-                            </div>
-                            <div className={`flex justify-between font-semibold border-t border-gray-200 pt-1 ${session.netAmount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                              <span>Net</span>
-                              <span>{session.netAmount >= 0 ? '+' : ''}£{session.netAmount}</span>
                             </div>
                           </div>
                         )}
@@ -681,23 +670,15 @@ const FNFApp = () => {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
             <h2 className="text-xl font-bold text-gray-900 mb-4">Week Closed</h2>
 
-            <div className="space-y-2 mb-4">
-              <div className="flex justify-between text-sm text-gray-700">
-                <span>{closeModal.attendeeCount} players × £{closeModal.collected / closeModal.attendeeCount}</span>
-                <span>£{closeModal.collected}</span>
-              </div>
-              <div className="flex justify-between text-sm text-gray-700">
-                <span>Pitch cost</span>
-                <span>−£{closeModal.pitchCost}</span>
-              </div>
-              <div className={`flex justify-between font-bold text-lg border-t border-gray-200 pt-2 mt-2 ${closeModal.net >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                <span>Transfer to FNF bank</span>
-                <span>£{closeModal.net}</span>
-              </div>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 text-center">
+              <p className="text-sm text-green-700 mb-1">{closeModal.attendeeCount} players × £{closeModal.playerFee}</p>
+              <p className="text-4xl font-bold text-green-700">£{closeModal.collected}</p>
+              <p className="text-sm font-semibold text-green-800 mt-1">Transfer to FNF bank</p>
             </div>
 
-            <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
-              <p className="text-sm text-green-800 font-medium">New bank balance: £{closeModal.newBalance}</p>
+            <div className="flex justify-between text-sm text-gray-600 mb-4 bg-gray-50 rounded-lg p-3">
+              <span>New bank balance</span>
+              <span className="font-semibold text-gray-900">£{closeModal.newBalance}</span>
             </div>
 
             {closeModal.unpaidCount > 0 && (
