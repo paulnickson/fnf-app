@@ -37,6 +37,7 @@ const FNFApp = () => {
   const [settings, setSettings] = useState({ playerFee: 8, pitchCost: 104 });
   const [settingsDraft, setSettingsDraft] = useState({ playerFee: 8, pitchCost: 104 });
   const [settingsSaved, setSettingsSaved] = useState(false);
+  const [closeModal, setCloseModal] = useState(null); // { collected, pitchCost, net, newBalance, attendeeCount, unpaidCount }
   const [editingSessionDate, setEditingSessionDate] = useState(false);
   const [newSessionDate, setNewSessionDate] = useState('');
   // Manual entry form state
@@ -146,7 +147,9 @@ const FNFApp = () => {
 
   const closeSession = (sessionId) => {
     const session = sessions.find(s => s.id === sessionId);
-    const attendeeCount = Object.values(session.playerAttendance).filter(a => a.attended).length;
+    const attendanceVals = Object.values(session.playerAttendance);
+    const attendeeCount = attendanceVals.filter(a => a.attended).length;
+    const unpaidCount = attendanceVals.filter(a => a.attended && !a.paid).length;
     const collected = attendeeCount * settings.playerFee;
     const net = collected - settings.pitchCost;
 
@@ -156,7 +159,11 @@ const FNFApp = () => {
         : s
     ));
 
-    setBankBalance(prev => prev + net);
+    setBankBalance(prev => {
+      const newBalance = prev + net;
+      setCloseModal({ collected, pitchCost: settings.pitchCost, net, newBalance, attendeeCount, unpaidCount });
+      return newBalance;
+    });
 
     // Add ledger entries for unpaid attendees
     const sessionLabel = `${new Date(session.date + 'T00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} - unpaid`;
@@ -667,6 +674,45 @@ const FNFApp = () => {
           </div>
         )}
       </div>
+
+      {/* Close Week Modal */}
+      {closeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Week Closed</h2>
+
+            <div className="space-y-2 mb-4">
+              <div className="flex justify-between text-sm text-gray-700">
+                <span>{closeModal.attendeeCount} players × £{closeModal.collected / closeModal.attendeeCount}</span>
+                <span>£{closeModal.collected}</span>
+              </div>
+              <div className="flex justify-between text-sm text-gray-700">
+                <span>Pitch cost</span>
+                <span>−£{closeModal.pitchCost}</span>
+              </div>
+              <div className={`flex justify-between font-bold text-lg border-t border-gray-200 pt-2 mt-2 ${closeModal.net >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <span>Transfer to FNF bank</span>
+                <span>£{closeModal.net}</span>
+              </div>
+            </div>
+
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+              <p className="text-sm text-green-800 font-medium">New bank balance: £{closeModal.newBalance}</p>
+            </div>
+
+            {closeModal.unpaidCount > 0 && (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4">
+                <p className="text-sm text-orange-800">{closeModal.unpaidCount} player{closeModal.unpaidCount > 1 ? 's' : ''} marked as owing — their balance has been updated.</p>
+              </div>
+            )}
+
+            <button
+              onClick={() => setCloseModal(null)}
+              className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition"
+            >Got it</button>
+          </div>
+        </div>
+      )}
 
       {/* Bottom Navigation */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg">
