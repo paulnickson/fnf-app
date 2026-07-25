@@ -19,6 +19,8 @@ const FNFApp = () => {
   const [settings, setSettings] = useState({ playerFee: 8, pitchCost: 104 });
   const [settingsDraft, setSettingsDraft] = useState({ playerFee: 8, pitchCost: 104 });
   const [settingsSaved, setSettingsSaved] = useState(false);
+  const [editingSessionDate, setEditingSessionDate] = useState(false);
+  const [newSessionDate, setNewSessionDate] = useState('');
   // Manual entry form state
   const [entryForm, setEntryForm] = useState(null); // { playerId }
   const [entryDraft, setEntryDraft] = useState({ date: '', amount: '', label: '', type: 'debt' });
@@ -99,12 +101,21 @@ const FNFApp = () => {
     }
   };
 
-  const createNewSession = () => {
-    const nextFriday = new Date();
-    nextFriday.setDate(nextFriday.getDate() + ((5 - nextFriday.getDay() + 7) % 7 || 7));
+  const nextFridayDate = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7 || 7));
+    return d.toISOString().split('T')[0];
+  };
+
+  const createNewSession = (date) => {
     const attendance = {};
     players.forEach(p => { attendance[p.id] = { attended: false, paid: false }; });
-    setSessions([{ id: Date.now().toString(), date: nextFriday.toISOString().split('T')[0], status: 'open', playerAttendance: attendance }, ...sessions]);
+    setSessions([{ id: Date.now().toString(), date: date || nextFridayDate(), status: 'open', playerAttendance: attendance }, ...sessions]);
+  };
+
+  const updateSessionDate = (sessionId, date) => {
+    setSessions(sessions.map(s => s.id === sessionId ? { ...s, date } : s));
+    setEditingSessionDate(false);
   };
 
   const updateAttendance = (sessionId, playerId, field, value) => {
@@ -249,9 +260,31 @@ const FNFApp = () => {
 
             {currentSession && (
               <div className="bg-white p-4 rounded-lg shadow-sm">
-                <h2 className="font-semibold text-gray-900 mb-3">
-                  {new Date(currentSession.date + 'T00:00').toLocaleDateString('en-GB', { weekday: 'long', month: 'short', day: 'numeric' })}
-                </h2>
+                {/* Editable session date */}
+                <div className="flex items-center justify-between mb-3">
+                  {editingSessionDate ? (
+                    <div className="flex items-center gap-2 flex-1">
+                      <input
+                        type="date"
+                        defaultValue={currentSession.date}
+                        onChange={(e) => setNewSessionDate(e.target.value)}
+                        className="border border-gray-300 rounded px-2 py-1 text-sm flex-1"
+                      />
+                      <button
+                        onClick={() => updateSessionDate(currentSession.id, newSessionDate || currentSession.date)}
+                        className="text-green-600 text-sm font-semibold"
+                      >Done</button>
+                      <button onClick={() => setEditingSessionDate(false)} className="text-gray-400 text-sm">Cancel</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => { setEditingSessionDate(true); setNewSessionDate(currentSession.date); }} className="text-left">
+                      <h2 className="font-semibold text-gray-900">
+                        {new Date(currentSession.date + 'T00:00').toLocaleDateString('en-GB', { weekday: 'long', month: 'short', day: 'numeric' })}
+                      </h2>
+                      <p className="text-xs text-green-600">Tap to change date</p>
+                    </button>
+                  )}
+                </div>
                 <div className="space-y-2 mb-4">
                   {players.map(player => (
                     <div key={player.id} className="flex items-center justify-between p-2 bg-gray-50 rounded border border-gray-200">
@@ -449,7 +482,18 @@ const FNFApp = () => {
         {/* History Tab */}
         {activeTab === 'history' && (
           <div className="space-y-3">
-            <button onClick={createNewSession} className="w-full bg-green-600 text-white py-2 rounded font-semibold hover:bg-green-700 transition">Create New Week</button>
+            <div className="bg-white p-3 rounded-lg shadow-sm flex items-center gap-2">
+              <input
+                type="date"
+                defaultValue={nextFridayDate()}
+                onChange={(e) => setNewSessionDate(e.target.value)}
+                className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm"
+              />
+              <button
+                onClick={() => createNewSession(newSessionDate || nextFridayDate())}
+                className="bg-green-600 text-white px-4 py-2 rounded font-semibold hover:bg-green-700 transition text-sm whitespace-nowrap"
+              >Create Week</button>
+            </div>
             {pastSessions.map(session => (
               <div key={session.id} className="bg-white rounded-lg shadow-sm overflow-hidden">
                 <button
