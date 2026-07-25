@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Copy, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { Copy, ChevronDown, ChevronUp, Trash2, Plus, X } from 'lucide-react';
+
+// Compute balance from ledger
+const computeBalance = (ledger = []) =>
+  ledger.reduce((sum, e) => sum + e.amount, 0);
 
 const FNFApp = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -9,18 +13,33 @@ const FNFApp = () => {
   const [showNewPlayer, setShowNewPlayer] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
   const [expandedSession, setExpandedSession] = useState(null);
+  const [expandedPlayer, setExpandedPlayer] = useState(null);
   const [copiedMessage, setCopiedMessage] = useState(false);
   const [playerFilter, setPlayerFilter] = useState('all');
   const [settings, setSettings] = useState({ playerFee: 8, pitchCost: 104 });
   const [settingsDraft, setSettingsDraft] = useState({ playerFee: 8, pitchCost: 104 });
   const [settingsSaved, setSettingsSaved] = useState(false);
+  // Manual entry form state
+  const [entryForm, setEntryForm] = useState(null); // { playerId }
+  const [entryDraft, setEntryDraft] = useState({ date: '', amount: '', label: '', type: 'debt' });
 
-  // Load data from localStorage on mount
+  const today = new Date().toISOString().split('T')[0];
+
+  // Migrate old player format (balance only → ledger)
+  const migratePlayer = (p) => {
+    if (p.ledger) return p;
+    const ledger = p.balance !== 0
+      ? [{ id: 'init', date: today, amount: p.balance, label: 'Opening balance' }]
+      : [];
+    return { ...p, ledger };
+  };
+
   useEffect(() => {
     const saved = localStorage.getItem('fnfData');
     if (saved) {
       const data = JSON.parse(saved);
-      setPlayers(data.players || []);
+      const migrated = (data.players || []).map(migratePlayer);
+      setPlayers(migrated);
       setSessions(data.sessions || []);
       setBankBalance(data.bankBalance || 0);
       if (data.settings) {
@@ -32,44 +51,40 @@ const FNFApp = () => {
     }
   }, []);
 
-  // Save to localStorage whenever data changes
   useEffect(() => {
-    localStorage.setItem('fnfData', JSON.stringify({
-      players,
-      sessions,
-      bankBalance,
-      settings,
-    }));
+    localStorage.setItem('fnfData', JSON.stringify({ players, sessions, bankBalance, settings }));
   }, [players, sessions, bankBalance, settings]);
 
   const initializeDemo = () => {
-    const demoPlayers = [
-      { id: '1', name: 'Luke', balance: -8 },
-      { id: '2', name: 'Ash', balance: -8 },
-      { id: '3', name: 'Saxon', balance: -8 },
-      { id: '4', name: 'Abdul', balance: 0 },
-      { id: '5', name: 'Adil', balance: 0 },
-      { id: '6', name: 'Adriano', balance: 0 },
-    ];
+    const lastFriday = new Date();
+    lastFriday.setDate(lastFriday.getDate() - ((lastFriday.getDay() + 2) % 7));
+    const lastFridayStr = lastFriday.toISOString().split('T')[0];
 
     const nextFriday = new Date();
     nextFriday.setDate(nextFriday.getDate() + ((5 - nextFriday.getDay() + 7) % 7 || 7));
 
-    const demoSessions = [
-      {
-        id: '1',
-        date: nextFriday.toISOString().split('T')[0],
-        status: 'open',
-        playerAttendance: {
-          '1': { attended: true, paid: false },
-          '2': { attended: true, paid: false },
-          '3': { attended: true, paid: false },
-          '4': { attended: true, paid: true },
-          '5': { attended: true, paid: true },
-          '6': { attended: false, paid: false },
-        },
-      },
+    const demoPlayers = [
+      { id: '1', name: 'Luke', ledger: [{ id: 'l1', date: lastFridayStr, amount: -8, label: 'Fri session - unpaid' }] },
+      { id: '2', name: 'Ash', ledger: [{ id: 'l2', date: lastFridayStr, amount: -8, label: 'Fri session - unpaid' }] },
+      { id: '3', name: 'Saxon', ledger: [{ id: 'l3', date: lastFridayStr, amount: -8, label: 'Fri session - unpaid' }] },
+      { id: '4', name: 'Abdul', ledger: [] },
+      { id: '5', name: 'Adil', ledger: [] },
+      { id: '6', name: 'Adriano', ledger: [] },
     ];
+
+    const demoSessions = [{
+      id: '1',
+      date: nextFriday.toISOString().split('T')[0],
+      status: 'open',
+      playerAttendance: {
+        '1': { attended: true, paid: false },
+        '2': { attended: true, paid: false },
+        '3': { attended: true, paid: false },
+        '4': { attended: true, paid: true },
+        '5': { attended: true, paid: true },
+        '6': { attended: false, paid: false },
+      },
+    }];
 
     setPlayers(demoPlayers);
     setSessions(demoSessions);
@@ -78,10 +93,7 @@ const FNFApp = () => {
 
   const addPlayer = () => {
     if (newPlayerName.trim()) {
-      setPlayers([
-        ...players,
-        { id: Date.now().toString(), name: newPlayerName, balance: 0 },
-      ]);
+      setPlayers([...players, { id: Date.now().toString(), name: newPlayerName, ledger: [] }]);
       setNewPlayerName('');
       setShowNewPlayer(false);
     }
@@ -90,36 +102,17 @@ const FNFApp = () => {
   const createNewSession = () => {
     const nextFriday = new Date();
     nextFriday.setDate(nextFriday.getDate() + ((5 - nextFriday.getDay() + 7) % 7 || 7));
-
     const attendance = {};
-    players.forEach(p => {
-      attendance[p.id] = { attended: false, paid: false };
-    });
-
-    const newSession = {
-      id: Date.now().toString(),
-      date: nextFriday.toISOString().split('T')[0],
-      status: 'open',
-      playerAttendance: attendance,
-    };
-
-    setSessions([newSession, ...sessions]);
+    players.forEach(p => { attendance[p.id] = { attended: false, paid: false }; });
+    setSessions([{ id: Date.now().toString(), date: nextFriday.toISOString().split('T')[0], status: 'open', playerAttendance: attendance }, ...sessions]);
   };
 
   const updateAttendance = (sessionId, playerId, field, value) => {
-    setSessions(
-      sessions.map(s =>
-        s.id === sessionId
-          ? {
-              ...s,
-              playerAttendance: {
-                ...s.playerAttendance,
-                [playerId]: { ...s.playerAttendance[playerId], [field]: value },
-              },
-            }
-          : s
-      )
-    );
+    setSessions(sessions.map(s =>
+      s.id === sessionId
+        ? { ...s, playerAttendance: { ...s.playerAttendance, [playerId]: { ...s.playerAttendance[playerId], [field]: value } } }
+        : s
+    ));
   };
 
   const closeSession = (sessionId) => {
@@ -128,47 +121,55 @@ const FNFApp = () => {
     const collected = attendeeCount * settings.playerFee;
     const net = collected - settings.pitchCost;
 
-    setSessions(
-      sessions.map(s =>
-        s.id === sessionId
-          ? {
-              ...s,
-              status: 'closed',
-              collected,
-              pitchCost: settings.pitchCost,
-              netAmount: net,
-              attendeeCount,
-            }
-          : s
-      )
-    );
+    setSessions(sessions.map(s =>
+      s.id === sessionId
+        ? { ...s, status: 'closed', collected, pitchCost: settings.pitchCost, netAmount: net, attendeeCount }
+        : s
+    ));
 
     setBankBalance(prev => prev + net);
 
-    setPlayers(
-      players.map(p => {
-        const attendance = session.playerAttendance[p.id];
-        if (attendance && attendance.attended && !attendance.paid) {
-          return { ...p, balance: p.balance - settings.playerFee };
-        }
-        return p;
-      })
-    );
+    // Add ledger entries for unpaid attendees
+    const sessionLabel = `${new Date(session.date + 'T00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} - unpaid`;
+    setPlayers(players.map(p => {
+      const attendance = session.playerAttendance[p.id];
+      if (attendance && attendance.attended && !attendance.paid) {
+        const entry = { id: `${sessionId}-${p.id}`, date: session.date, amount: -settings.playerFee, label: sessionLabel };
+        return { ...p, ledger: [...(p.ledger || []), entry] };
+      }
+      return p;
+    }));
   };
 
   const cancelSession = (sessionId) => {
-    setSessions(
-      sessions.map(s =>
-        s.id === sessionId ? { ...s, status: 'cancelled' } : s
-      )
-    );
+    setSessions(sessions.map(s => s.id === sessionId ? { ...s, status: 'cancelled' } : s));
+  };
+
+  // Add a manual ledger entry to a player
+  const addManualEntry = () => {
+    const amount = entryDraft.type === 'debt'
+      ? -Math.abs(parseFloat(entryDraft.amount))
+      : Math.abs(parseFloat(entryDraft.amount));
+    if (!entryDraft.date || isNaN(amount) || !entryDraft.label.trim()) return;
+
+    const entry = { id: Date.now().toString(), date: entryDraft.date, amount, label: entryDraft.label.trim() };
+    setPlayers(players.map(p =>
+      p.id === entryForm.playerId
+        ? { ...p, ledger: [...(p.ledger || []), entry].sort((a, b) => a.date.localeCompare(b.date)) }
+        : p
+    ));
+    setEntryForm(null);
+    setEntryDraft({ date: '', amount: '', label: '', type: 'debt' });
+  };
+
+  const deleteEntry = (playerId, entryId) => {
+    setPlayers(players.map(p =>
+      p.id === playerId ? { ...p, ledger: p.ledger.filter(e => e.id !== entryId) } : p
+    ));
   };
 
   const saveSettings = () => {
-    const updated = {
-      playerFee: parseFloat(settingsDraft.playerFee) || 8,
-      pitchCost: parseFloat(settingsDraft.pitchCost) || 104,
-    };
+    const updated = { playerFee: parseFloat(settingsDraft.playerFee) || 8, pitchCost: parseFloat(settingsDraft.pitchCost) || 104 };
     setSettings(updated);
     setSettingsDraft(updated);
     setSettingsSaved(true);
@@ -176,15 +177,12 @@ const FNFApp = () => {
   };
 
   const generateWhatsAppMessage = () => {
-    const overdue = players.filter(p => p.balance < 0);
+    const overdue = players.filter(p => computeBalance(p.ledger) < 0);
     if (overdue.length === 0) return 'All payments up to date!';
-
     const lines = ['Friday Night Football - outstanding balances', ''];
-    overdue.forEach(p => {
-      lines.push(`${p.name} - £${Math.abs(p.balance)}`);
-    });
+    overdue.forEach(p => { lines.push(`${p.name} - £${Math.abs(computeBalance(p.ledger))}`); });
     lines.push('');
-    lines.push(`Total outstanding: £${overdue.reduce((sum, p) => sum + Math.abs(p.balance), 0)}`);
+    lines.push(`Total outstanding: £${overdue.reduce((sum, p) => sum + Math.abs(computeBalance(p.ledger)), 0)}`);
     return lines.join('\n');
   };
 
@@ -194,9 +192,16 @@ const FNFApp = () => {
     setTimeout(() => setCopiedMessage(false), 2000);
   };
 
-  const totalOwed = Math.abs(players.reduce((sum, p) => sum + Math.min(p.balance, 0), 0));
+  const totalOwed = players.reduce((sum, p) => {
+    const bal = computeBalance(p.ledger);
+    return sum + (bal < 0 ? Math.abs(bal) : 0);
+  }, 0);
+
   const currentSession = sessions.find(s => s.status === 'open');
   const pastSessions = sessions.filter(s => s.status !== 'open');
+
+  const formatDate = (dateStr) =>
+    new Date(dateStr + 'T00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
   return (
     <div className="bg-gray-50 min-h-screen">
@@ -213,7 +218,6 @@ const FNFApp = () => {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="max-w-2xl mx-auto px-4 py-4 pb-32">
 
         {/* Dashboard Tab */}
@@ -233,10 +237,7 @@ const FNFApp = () => {
             <div className="bg-white p-4 rounded-lg shadow-sm">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="font-semibold text-gray-900">WhatsApp Message</h2>
-                <button
-                  onClick={copyToClipboard}
-                  className="flex items-center gap-2 text-green-600 hover:text-green-700 text-sm font-medium"
-                >
+                <button onClick={copyToClipboard} className="flex items-center gap-2 text-green-600 hover:text-green-700 text-sm font-medium">
                   <Copy size={16} />
                   {copiedMessage ? 'Copied!' : 'Copy'}
                 </button>
@@ -249,49 +250,25 @@ const FNFApp = () => {
             {currentSession && (
               <div className="bg-white p-4 rounded-lg shadow-sm">
                 <h2 className="font-semibold text-gray-900 mb-3">
-                  {new Date(currentSession.date + 'T00:00').toLocaleDateString('en-GB', {
-                    weekday: 'long', month: 'short', day: 'numeric',
-                  })}
+                  {new Date(currentSession.date + 'T00:00').toLocaleDateString('en-GB', { weekday: 'long', month: 'short', day: 'numeric' })}
                 </h2>
-
                 <div className="space-y-2 mb-4">
                   {players.map(player => (
-                    <div
-                      key={player.id}
-                      className="flex items-center justify-between p-2 bg-gray-50 rounded border border-gray-200"
-                    >
+                    <div key={player.id} className="flex items-center justify-between p-2 bg-gray-50 rounded border border-gray-200">
                       <span className="font-medium text-gray-900">{player.name}</span>
                       <div className="flex gap-2">
                         <button
-                          onClick={() =>
-                            updateAttendance(currentSession.id, player.id, 'attended',
-                              !currentSession.playerAttendance[player.id]?.attended)
-                          }
-                          className={`px-3 py-1 rounded text-sm font-medium transition ${
-                            currentSession.playerAttendance[player.id]?.attended
-                              ? 'bg-green-600 text-white' : 'bg-gray-300 text-gray-700'
-                          }`}
-                        >
-                          In
-                        </button>
+                          onClick={() => updateAttendance(currentSession.id, player.id, 'attended', !currentSession.playerAttendance[player.id]?.attended)}
+                          className={`px-3 py-1 rounded text-sm font-medium transition ${currentSession.playerAttendance[player.id]?.attended ? 'bg-green-600 text-white' : 'bg-gray-300 text-gray-700'}`}
+                        >In</button>
                         <button
-                          onClick={() =>
-                            updateAttendance(currentSession.id, player.id, 'paid',
-                              !currentSession.playerAttendance[player.id]?.paid)
-                          }
-                          className={`px-3 py-1 rounded text-sm font-medium transition ${
-                            currentSession.playerAttendance[player.id]?.paid
-                              ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-700'
-                          }`}
-                        >
-                          Paid
-                        </button>
+                          onClick={() => updateAttendance(currentSession.id, player.id, 'paid', !currentSession.playerAttendance[player.id]?.paid)}
+                          className={`px-3 py-1 rounded text-sm font-medium transition ${currentSession.playerAttendance[player.id]?.paid ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-700'}`}
+                        >Paid</button>
                       </div>
                     </div>
                   ))}
                 </div>
-
-                {/* Session preview */}
                 <div className="bg-gray-50 rounded p-3 mb-3 text-sm text-gray-600">
                   {(() => {
                     const attending = Object.values(currentSession.playerAttendance).filter(a => a.attended).length;
@@ -300,27 +277,14 @@ const FNFApp = () => {
                     return (
                       <div className="flex justify-between">
                         <span>{attending} players × £{settings.playerFee} = £{collected}</span>
-                        <span className={net >= 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
-                          Net: {net >= 0 ? '+' : ''}£{net}
-                        </span>
+                        <span className={net >= 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>Net: {net >= 0 ? '+' : ''}£{net}</span>
                       </div>
                     );
                   })()}
                 </div>
-
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => closeSession(currentSession.id)}
-                    className="flex-1 bg-green-600 text-white py-2 rounded font-semibold hover:bg-green-700 transition"
-                  >
-                    Close Week
-                  </button>
-                  <button
-                    onClick={() => cancelSession(currentSession.id)}
-                    className="flex-1 bg-gray-300 text-gray-700 py-2 rounded font-semibold hover:bg-gray-400 transition"
-                  >
-                    Cancel
-                  </button>
+                  <button onClick={() => closeSession(currentSession.id)} className="flex-1 bg-green-600 text-white py-2 rounded font-semibold hover:bg-green-700 transition">Close Week</button>
+                  <button onClick={() => cancelSession(currentSession.id)} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded font-semibold hover:bg-gray-400 transition">Cancel</button>
                 </div>
               </div>
             )}
@@ -333,19 +297,11 @@ const FNFApp = () => {
             {/* Add player */}
             <div className="flex gap-2">
               {!showNewPlayer ? (
-                <button
-                  onClick={() => setShowNewPlayer(true)}
-                  className="w-full bg-green-600 text-white py-2 rounded font-semibold hover:bg-green-700 transition"
-                >
-                  Add Player
-                </button>
+                <button onClick={() => setShowNewPlayer(true)} className="w-full bg-green-600 text-white py-2 rounded font-semibold hover:bg-green-700 transition">Add Player</button>
               ) : (
                 <div className="flex gap-2 w-full">
                   <input
-                    autoFocus
-                    type="text"
-                    placeholder="Player name"
-                    value={newPlayerName}
+                    autoFocus type="text" placeholder="Player name" value={newPlayerName}
                     onChange={(e) => setNewPlayerName(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && addPlayer()}
                     className="flex-1 px-3 py-2 border border-gray-300 rounded"
@@ -360,52 +316,129 @@ const FNFApp = () => {
             <div className="flex rounded-lg overflow-hidden border border-gray-200 bg-white shadow-sm">
               {[
                 { id: 'all', label: `All (${players.length})` },
-                { id: 'owes', label: `Owes (${players.filter(p => p.balance < 0).length})` },
-                { id: 'credit', label: `Credit (${players.filter(p => p.balance > 0).length})` },
+                { id: 'owes', label: `Owes (${players.filter(p => computeBalance(p.ledger) < 0).length})` },
+                { id: 'credit', label: `Credit (${players.filter(p => computeBalance(p.ledger) > 0).length})` },
               ].map(f => (
-                <button
-                  key={f.id}
-                  onClick={() => setPlayerFilter(f.id)}
-                  className={`flex-1 py-2 text-sm font-medium transition ${
-                    playerFilter === f.id
-                      ? 'bg-green-600 text-white'
-                      : 'text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
+                <button key={f.id} onClick={() => setPlayerFilter(f.id)}
+                  className={`flex-1 py-2 text-sm font-medium transition ${playerFilter === f.id ? 'bg-green-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
                   {f.label}
                 </button>
               ))}
             </div>
 
-            {/* Player list — alphabetical, filtered */}
+            {/* Player list */}
             {[...players]
               .filter(p => {
-                if (playerFilter === 'owes') return p.balance < 0;
-                if (playerFilter === 'credit') return p.balance > 0;
+                const bal = computeBalance(p.ledger);
+                if (playerFilter === 'owes') return bal < 0;
+                if (playerFilter === 'credit') return bal > 0;
                 return true;
               })
               .sort((a, b) => a.name.localeCompare(b.name))
-              .map(player => (
-                <div key={player.id} className="bg-white p-4 rounded-lg shadow-sm flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-gray-900">{player.name}</p>
-                    <p className={`text-sm ${player.balance < 0 ? 'text-orange-600 font-medium' : player.balance > 0 ? 'text-blue-600 font-medium' : 'text-gray-500'}`}>
-                      {player.balance < 0 ? `Owes £${Math.abs(player.balance)}` : player.balance === 0 ? 'Up to date' : `Credit £${player.balance}`}
-                    </p>
+              .map(player => {
+                const balance = computeBalance(player.ledger);
+                const isExpanded = expandedPlayer === player.id;
+                return (
+                  <div key={player.id} className="bg-white rounded-lg shadow-sm overflow-hidden">
+                    {/* Player row */}
+                    <div className="flex items-center p-4">
+                      <button className="flex-1 flex items-center justify-between text-left" onClick={() => setExpandedPlayer(isExpanded ? null : player.id)}>
+                        <div>
+                          <p className="font-semibold text-gray-900">{player.name}</p>
+                          <p className={`text-sm ${balance < 0 ? 'text-orange-600 font-medium' : balance > 0 ? 'text-blue-600 font-medium' : 'text-gray-500'}`}>
+                            {balance < 0 ? `Owes £${Math.abs(balance)}` : balance === 0 ? 'Up to date' : `Credit £${balance}`}
+                          </p>
+                        </div>
+                        {isExpanded ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+                      </button>
+                      <button onClick={() => setPlayers(players.filter(p => p.id !== player.id))} className="ml-3 text-gray-300 hover:text-red-500 transition">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+
+                    {/* Expanded: ledger + add entry */}
+                    {isExpanded && (
+                      <div className="border-t border-gray-100 bg-gray-50 p-4 space-y-3">
+                        {/* Ledger entries */}
+                        {(player.ledger || []).length === 0 ? (
+                          <p className="text-sm text-gray-400">No entries yet</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {[...player.ledger]
+                              .sort((a, b) => a.date.localeCompare(b.date))
+                              .map(entry => (
+                                <div key={entry.id} className="flex items-center justify-between bg-white rounded p-2 border border-gray-200">
+                                  <div>
+                                    <p className="text-sm font-medium text-gray-800">{entry.label}</p>
+                                    <p className="text-xs text-gray-400">{formatDate(entry.date)}</p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-sm font-semibold ${entry.amount < 0 ? 'text-orange-600' : 'text-blue-600'}`}>
+                                      {entry.amount < 0 ? '−' : '+'}£{Math.abs(entry.amount)}
+                                    </span>
+                                    <button onClick={() => deleteEntry(player.id, entry.id)} className="text-gray-300 hover:text-red-500 transition">
+                                      <X size={14} />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))
+                            }
+                          </div>
+                        )}
+
+                        {/* Add entry form */}
+                        {entryForm?.playerId === player.id ? (
+                          <div className="bg-white rounded p-3 border border-gray-200 space-y-2">
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => setEntryDraft({ ...entryDraft, type: 'debt' })}
+                                className={`flex-1 py-1 rounded text-sm font-medium ${entryDraft.type === 'debt' ? 'bg-orange-500 text-white' : 'bg-gray-200 text-gray-600'}`}
+                              >Debt (owes)</button>
+                              <button
+                                onClick={() => setEntryDraft({ ...entryDraft, type: 'credit' })}
+                                className={`flex-1 py-1 rounded text-sm font-medium ${entryDraft.type === 'credit' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-600'}`}
+                              >Credit (paid)</button>
+                            </div>
+                            <input
+                              type="date" value={entryDraft.date}
+                              onChange={(e) => setEntryDraft({ ...entryDraft, date: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                            />
+                            <input
+                              type="number" placeholder="Amount (£)" value={entryDraft.amount} min="0" step="0.50"
+                              onChange={(e) => setEntryDraft({ ...entryDraft, amount: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                            />
+                            <input
+                              type="text" placeholder="Label (e.g. Fri 18 Jul - unpaid)" value={entryDraft.label}
+                              onChange={(e) => setEntryDraft({ ...entryDraft, label: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                            />
+                            <div className="flex gap-2">
+                              <button onClick={addManualEntry} className="flex-1 bg-green-600 text-white py-2 rounded text-sm font-semibold hover:bg-green-700">Save</button>
+                              <button onClick={() => { setEntryForm(null); setEntryDraft({ date: '', amount: '', label: '', type: 'debt' }); }}
+                                className="flex-1 bg-gray-200 text-gray-700 py-2 rounded text-sm font-semibold hover:bg-gray-300">Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => { setEntryForm({ playerId: player.id }); setEntryDraft({ date: today, amount: settings.playerFee.toString(), label: '', type: 'debt' }); }}
+                            className="flex items-center gap-2 text-green-600 text-sm font-medium hover:text-green-700"
+                          >
+                            <Plus size={16} /> Add entry
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <button
-                    onClick={() => setPlayers(players.filter(p => p.id !== player.id))}
-                    className="text-gray-400 hover:text-red-600 transition"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                </div>
-              ))
+                );
+              })
             }
 
             {players.filter(p => {
-              if (playerFilter === 'owes') return p.balance < 0;
-              if (playerFilter === 'credit') return p.balance > 0;
+              const bal = computeBalance(p.ledger);
+              if (playerFilter === 'owes') return bal < 0;
+              if (playerFilter === 'credit') return bal > 0;
               return false;
             }).length === 0 && playerFilter !== 'all' && (
               <p className="text-center text-gray-400 py-6 text-sm">No players in this category</p>
@@ -416,13 +449,7 @@ const FNFApp = () => {
         {/* History Tab */}
         {activeTab === 'history' && (
           <div className="space-y-3">
-            <button
-              onClick={createNewSession}
-              className="w-full bg-green-600 text-white py-2 rounded font-semibold hover:bg-green-700 transition"
-            >
-              Create New Week
-            </button>
-
+            <button onClick={createNewSession} className="w-full bg-green-600 text-white py-2 rounded font-semibold hover:bg-green-700 transition">Create New Week</button>
             {pastSessions.map(session => (
               <div key={session.id} className="bg-white rounded-lg shadow-sm overflow-hidden">
                 <button
@@ -433,9 +460,7 @@ const FNFApp = () => {
                     {expandedSession === session.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                     <div className="text-left">
                       <p className="font-semibold text-gray-900">
-                        {new Date(session.date + 'T00:00').toLocaleDateString('en-GB', {
-                          weekday: 'short', month: 'short', day: 'numeric',
-                        })}
+                        {new Date(session.date + 'T00:00').toLocaleDateString('en-GB', { weekday: 'short', month: 'short', day: 'numeric' })}
                       </p>
                       <p className="text-sm text-gray-600 capitalize">{session.status}</p>
                     </div>
@@ -449,14 +474,12 @@ const FNFApp = () => {
                     </div>
                   )}
                 </button>
-
                 {expandedSession === session.id && (
                   <div className="bg-gray-50 p-4 border-t border-gray-200">
                     {session.status === 'cancelled' ? (
                       <p className="text-sm text-gray-600">This session was cancelled</p>
                     ) : (
                       <div className="space-y-3">
-                        {/* Financial breakdown */}
                         {session.collected !== undefined && (
                           <div className="text-sm bg-white rounded p-3 border border-gray-200 space-y-1">
                             <div className="flex justify-between text-gray-700">
@@ -473,7 +496,6 @@ const FNFApp = () => {
                             </div>
                           </div>
                         )}
-                        {/* Player list */}
                         <div className="space-y-2 text-sm">
                           {players.map(p => {
                             const att = session.playerAttendance[p.id];
@@ -503,48 +525,33 @@ const FNFApp = () => {
           <div className="space-y-4">
             <div className="bg-white p-4 rounded-lg shadow-sm">
               <h2 className="font-semibold text-gray-900 mb-4">Pricing</h2>
-
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Player fee (£ per session)</label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">£</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.50"
-                      value={settingsDraft.playerFee}
+                    <input type="number" min="0" step="0.50" value={settingsDraft.playerFee}
                       onChange={(e) => setSettingsDraft({ ...settingsDraft, playerFee: e.target.value })}
                       className="w-full pl-7 pr-4 py-2 border border-gray-300 rounded text-gray-900 text-lg font-medium"
                     />
                   </div>
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Pitch cost (£ per session)</label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">£</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.50"
-                      value={settingsDraft.pitchCost}
+                    <input type="number" min="0" step="0.50" value={settingsDraft.pitchCost}
                       onChange={(e) => setSettingsDraft({ ...settingsDraft, pitchCost: e.target.value })}
                       className="w-full pl-7 pr-4 py-2 border border-gray-300 rounded text-gray-900 text-lg font-medium"
                     />
                   </div>
                 </div>
-
                 <div className="bg-gray-50 rounded p-3 text-sm text-gray-600">
                   <p className="font-medium text-gray-700 mb-1">Break-even</p>
                   <p>Need <span className="font-semibold text-gray-900">{Math.ceil(settingsDraft.pitchCost / settingsDraft.playerFee)} players</span> to cover the pitch</p>
                   <p className="text-xs text-gray-500 mt-1">({settingsDraft.pitchCost} ÷ {settingsDraft.playerFee} = {(settingsDraft.pitchCost / settingsDraft.playerFee).toFixed(1)})</p>
                 </div>
-
-                <button
-                  onClick={saveSettings}
-                  className="w-full bg-green-600 text-white py-2 rounded font-semibold hover:bg-green-700 transition"
-                >
+                <button onClick={saveSettings} className="w-full bg-green-600 text-white py-2 rounded font-semibold hover:bg-green-700 transition">
                   {settingsSaved ? 'Saved!' : 'Save Settings'}
                 </button>
               </div>
@@ -562,15 +569,8 @@ const FNFApp = () => {
             { id: 'history', label: 'History' },
             { id: 'settings', label: 'Settings' },
           ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 py-3 text-sm font-medium transition border-t-2 ${
-                activeTab === tab.id
-                  ? 'text-green-600 border-green-600'
-                  : 'text-gray-600 border-transparent hover:text-gray-900'
-              }`}
-            >
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 py-3 text-sm font-medium transition border-t-2 ${activeTab === tab.id ? 'text-green-600 border-green-600' : 'text-gray-600 border-transparent hover:text-gray-900'}`}>
               {tab.label}
             </button>
           ))}
