@@ -10,6 +10,9 @@ const FNFApp = () => {
   const [newPlayerName, setNewPlayerName] = useState('');
   const [expandedSession, setExpandedSession] = useState(null);
   const [copiedMessage, setCopiedMessage] = useState(false);
+  const [settings, setSettings] = useState({ playerFee: 8, pitchCost: 104 });
+  const [settingsDraft, setSettingsDraft] = useState({ playerFee: 8, pitchCost: 104 });
+  const [settingsSaved, setSettingsSaved] = useState(false);
 
   // Load data from localStorage on mount
   useEffect(() => {
@@ -19,8 +22,11 @@ const FNFApp = () => {
       setPlayers(data.players || []);
       setSessions(data.sessions || []);
       setBankBalance(data.bankBalance || 0);
+      if (data.settings) {
+        setSettings(data.settings);
+        setSettingsDraft(data.settings);
+      }
     } else {
-      // Initialize with demo data
       initializeDemo();
     }
   }, []);
@@ -31,8 +37,9 @@ const FNFApp = () => {
       players,
       sessions,
       bankBalance,
+      settings,
     }));
-  }, [players, sessions, bankBalance]);
+  }, [players, sessions, bankBalance, settings]);
 
   const initializeDemo = () => {
     const demoPlayers = [
@@ -72,11 +79,7 @@ const FNFApp = () => {
     if (newPlayerName.trim()) {
       setPlayers([
         ...players,
-        {
-          id: Date.now().toString(),
-          name: newPlayerName,
-          balance: 0,
-        },
+        { id: Date.now().toString(), name: newPlayerName, balance: 0 },
       ]);
       setNewPlayerName('');
       setShowNewPlayer(false);
@@ -110,10 +113,7 @@ const FNFApp = () => {
               ...s,
               playerAttendance: {
                 ...s.playerAttendance,
-                [playerId]: {
-                  ...s.playerAttendance[playerId],
-                  [field]: value,
-                },
+                [playerId]: { ...s.playerAttendance[playerId], [field]: value },
               },
             }
           : s
@@ -124,24 +124,31 @@ const FNFApp = () => {
   const closeSession = (sessionId) => {
     const session = sessions.find(s => s.id === sessionId);
     const attendeeCount = Object.values(session.playerAttendance).filter(a => a.attended).length;
-    const amountToBank = attendeeCount * 8;
+    const collected = attendeeCount * settings.playerFee;
+    const net = collected - settings.pitchCost;
 
     setSessions(
       sessions.map(s =>
         s.id === sessionId
-          ? { ...s, status: 'closed', bankAmount: amountToBank }
+          ? {
+              ...s,
+              status: 'closed',
+              collected,
+              pitchCost: settings.pitchCost,
+              netAmount: net,
+              attendeeCount,
+            }
           : s
       )
     );
 
-    setBankBalance(bankBalance + amountToBank);
+    setBankBalance(prev => prev + net);
 
-    // Update player balances for those who attended but didn't pay
     setPlayers(
       players.map(p => {
         const attendance = session.playerAttendance[p.id];
         if (attendance && attendance.attended && !attendance.paid) {
-          return { ...p, balance: p.balance - 8 };
+          return { ...p, balance: p.balance - settings.playerFee };
         }
         return p;
       })
@@ -156,11 +163,20 @@ const FNFApp = () => {
     );
   };
 
+  const saveSettings = () => {
+    const updated = {
+      playerFee: parseFloat(settingsDraft.playerFee) || 8,
+      pitchCost: parseFloat(settingsDraft.pitchCost) || 104,
+    };
+    setSettings(updated);
+    setSettingsDraft(updated);
+    setSettingsSaved(true);
+    setTimeout(() => setSettingsSaved(false), 2000);
+  };
+
   const generateWhatsAppMessage = () => {
     const overdue = players.filter(p => p.balance < 0);
-    if (overdue.length === 0) {
-      return 'All payments up to date!';
-    }
+    if (overdue.length === 0) return 'All payments up to date!';
 
     const lines = ['Friday Night Football - outstanding balances', ''];
     overdue.forEach(p => {
@@ -168,7 +184,6 @@ const FNFApp = () => {
     });
     lines.push('');
     lines.push(`Total outstanding: £${overdue.reduce((sum, p) => sum + Math.abs(p.balance), 0)}`);
-
     return lines.join('\n');
   };
 
@@ -185,13 +200,8 @@ const FNFApp = () => {
   return (
     <div className="bg-gray-50 min-h-screen">
       <style>{`
-        body {
-          margin: 0;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        }
-        * {
-          box-sizing: border-box;
-        }
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+        * { box-sizing: border-box; }
       `}</style>
 
       {/* Header */}
@@ -204,10 +214,10 @@ const FNFApp = () => {
 
       {/* Main Content */}
       <div className="max-w-2xl mx-auto px-4 py-4 pb-32">
+
         {/* Dashboard Tab */}
         {activeTab === 'dashboard' && (
           <div className="space-y-4">
-            {/* Summary Cards */}
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-600">
                 <p className="text-gray-600 text-xs font-semibold uppercase tracking-wide">Bank Balance</p>
@@ -219,7 +229,6 @@ const FNFApp = () => {
               </div>
             </div>
 
-            {/* WhatsApp Message */}
             <div className="bg-white p-4 rounded-lg shadow-sm">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="font-semibold text-gray-900">WhatsApp Message</h2>
@@ -236,14 +245,11 @@ const FNFApp = () => {
               </pre>
             </div>
 
-            {/* Current Session */}
             {currentSession && (
               <div className="bg-white p-4 rounded-lg shadow-sm">
                 <h2 className="font-semibold text-gray-900 mb-3">
                   {new Date(currentSession.date + 'T00:00').toLocaleDateString('en-GB', {
-                    weekday: 'long',
-                    month: 'short',
-                    day: 'numeric',
+                    weekday: 'long', month: 'short', day: 'numeric',
                   })}
                 </h2>
 
@@ -257,34 +263,24 @@ const FNFApp = () => {
                       <div className="flex gap-2">
                         <button
                           onClick={() =>
-                            updateAttendance(
-                              currentSession.id,
-                              player.id,
-                              'attended',
-                              !currentSession.playerAttendance[player.id]?.attended
-                            )
+                            updateAttendance(currentSession.id, player.id, 'attended',
+                              !currentSession.playerAttendance[player.id]?.attended)
                           }
                           className={`px-3 py-1 rounded text-sm font-medium transition ${
                             currentSession.playerAttendance[player.id]?.attended
-                              ? 'bg-green-600 text-white'
-                              : 'bg-gray-300 text-gray-700'
+                              ? 'bg-green-600 text-white' : 'bg-gray-300 text-gray-700'
                           }`}
                         >
                           In
                         </button>
                         <button
                           onClick={() =>
-                            updateAttendance(
-                              currentSession.id,
-                              player.id,
-                              'paid',
-                              !currentSession.playerAttendance[player.id]?.paid
-                            )
+                            updateAttendance(currentSession.id, player.id, 'paid',
+                              !currentSession.playerAttendance[player.id]?.paid)
                           }
                           className={`px-3 py-1 rounded text-sm font-medium transition ${
                             currentSession.playerAttendance[player.id]?.paid
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-300 text-gray-700'
+                              ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-700'
                           }`}
                         >
                           Paid
@@ -292,6 +288,23 @@ const FNFApp = () => {
                       </div>
                     </div>
                   ))}
+                </div>
+
+                {/* Session preview */}
+                <div className="bg-gray-50 rounded p-3 mb-3 text-sm text-gray-600">
+                  {(() => {
+                    const attending = Object.values(currentSession.playerAttendance).filter(a => a.attended).length;
+                    const collected = attending * settings.playerFee;
+                    const net = collected - settings.pitchCost;
+                    return (
+                      <div className="flex justify-between">
+                        <span>{attending} players × £{settings.playerFee} = £{collected}</span>
+                        <span className={net >= 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
+                          Net: {net >= 0 ? '+' : ''}£{net}
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="flex gap-2">
@@ -335,21 +348,8 @@ const FNFApp = () => {
                     onKeyPress={(e) => e.key === 'Enter' && addPlayer()}
                     className="flex-1 px-3 py-2 border border-gray-300 rounded"
                   />
-                  <button
-                    onClick={addPlayer}
-                    className="bg-green-600 text-white px-4 py-2 rounded font-semibold hover:bg-green-700"
-                  >
-                    Add
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowNewPlayer(false);
-                      setNewPlayerName('');
-                    }}
-                    className="bg-gray-300 text-gray-700 px-4 py-2 rounded font-semibold hover:bg-gray-400"
-                  >
-                    Cancel
-                  </button>
+                  <button onClick={addPlayer} className="bg-green-600 text-white px-4 py-2 rounded font-semibold hover:bg-green-700">Add</button>
+                  <button onClick={() => { setShowNewPlayer(false); setNewPlayerName(''); }} className="bg-gray-300 text-gray-700 px-4 py-2 rounded font-semibold hover:bg-gray-400">Cancel</button>
                 </div>
               )}
             </div>
@@ -394,16 +394,19 @@ const FNFApp = () => {
                     <div className="text-left">
                       <p className="font-semibold text-gray-900">
                         {new Date(session.date + 'T00:00').toLocaleDateString('en-GB', {
-                          weekday: 'short',
-                          month: 'short',
-                          day: 'numeric',
+                          weekday: 'short', month: 'short', day: 'numeric',
                         })}
                       </p>
                       <p className="text-sm text-gray-600 capitalize">{session.status}</p>
                     </div>
                   </div>
                   {session.status === 'closed' && (
-                    <p className="font-semibold text-green-600">£{session.bankAmount}</p>
+                    <div className="text-right">
+                      <p className={`font-semibold ${session.netAmount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {session.netAmount >= 0 ? '+' : ''}£{session.netAmount}
+                      </p>
+                      <p className="text-xs text-gray-400">{session.attendeeCount} players</p>
+                    </div>
                   )}
                 </button>
 
@@ -412,30 +415,100 @@ const FNFApp = () => {
                     {session.status === 'cancelled' ? (
                       <p className="text-sm text-gray-600">This session was cancelled</p>
                     ) : (
-                      <div className="space-y-2 text-sm">
-                        {players.map(p => {
-                          const att = session.playerAttendance[p.id];
-                          if (!att) return null;
-                          return (
-                            <div key={p.id} className="flex justify-between items-center">
-                              <span className="text-gray-900">{p.name}</span>
-                              <div className="flex gap-2">
-                                {att.attended && (
-                                  <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Played</span>
-                                )}
-                                {att.attended && att.paid && (
-                                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Paid</span>
-                                )}
-                              </div>
+                      <div className="space-y-3">
+                        {/* Financial breakdown */}
+                        {session.collected !== undefined && (
+                          <div className="text-sm bg-white rounded p-3 border border-gray-200 space-y-1">
+                            <div className="flex justify-between text-gray-700">
+                              <span>Collected ({session.attendeeCount} × £{session.collected / session.attendeeCount})</span>
+                              <span>£{session.collected}</span>
                             </div>
-                          );
-                        })}
+                            <div className="flex justify-between text-gray-700">
+                              <span>Pitch cost</span>
+                              <span>−£{session.pitchCost}</span>
+                            </div>
+                            <div className={`flex justify-between font-semibold border-t border-gray-200 pt-1 ${session.netAmount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              <span>Net</span>
+                              <span>{session.netAmount >= 0 ? '+' : ''}£{session.netAmount}</span>
+                            </div>
+                          </div>
+                        )}
+                        {/* Player list */}
+                        <div className="space-y-2 text-sm">
+                          {players.map(p => {
+                            const att = session.playerAttendance[p.id];
+                            if (!att) return null;
+                            return (
+                              <div key={p.id} className="flex justify-between items-center">
+                                <span className="text-gray-900">{p.name}</span>
+                                <div className="flex gap-2">
+                                  {att.attended && <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Played</span>}
+                                  {att.attended && att.paid && <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Paid</span>}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
                   </div>
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Settings Tab */}
+        {activeTab === 'settings' && (
+          <div className="space-y-4">
+            <div className="bg-white p-4 rounded-lg shadow-sm">
+              <h2 className="font-semibold text-gray-900 mb-4">Pricing</h2>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Player fee (£ per session)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">£</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.50"
+                      value={settingsDraft.playerFee}
+                      onChange={(e) => setSettingsDraft({ ...settingsDraft, playerFee: e.target.value })}
+                      className="w-full pl-7 pr-4 py-2 border border-gray-300 rounded text-gray-900 text-lg font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Pitch cost (£ per session)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">£</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.50"
+                      value={settingsDraft.pitchCost}
+                      onChange={(e) => setSettingsDraft({ ...settingsDraft, pitchCost: e.target.value })}
+                      className="w-full pl-7 pr-4 py-2 border border-gray-300 rounded text-gray-900 text-lg font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 rounded p-3 text-sm text-gray-600">
+                  <p className="font-medium text-gray-700 mb-1">Break-even</p>
+                  <p>Need <span className="font-semibold text-gray-900">{Math.ceil(settingsDraft.pitchCost / settingsDraft.playerFee)} players</span> to cover the pitch</p>
+                  <p className="text-xs text-gray-500 mt-1">({settingsDraft.pitchCost} ÷ {settingsDraft.playerFee} = {(settingsDraft.pitchCost / settingsDraft.playerFee).toFixed(1)})</p>
+                </div>
+
+                <button
+                  onClick={saveSettings}
+                  className="w-full bg-green-600 text-white py-2 rounded font-semibold hover:bg-green-700 transition"
+                >
+                  {settingsSaved ? 'Saved!' : 'Save Settings'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -447,6 +520,7 @@ const FNFApp = () => {
             { id: 'dashboard', label: 'Dashboard' },
             { id: 'players', label: 'Players' },
             { id: 'history', label: 'History' },
+            { id: 'settings', label: 'Settings' },
           ].map(tab => (
             <button
               key={tab.id}
