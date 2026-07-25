@@ -245,18 +245,17 @@ const FNFApp = () => {
               </div>
             </div>
 
-            <div className="bg-white p-4 rounded-lg shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="font-semibold text-gray-900">WhatsApp Message</h2>
-                <button onClick={copyToClipboard} className="flex items-center gap-2 text-green-600 hover:text-green-700 text-sm font-medium">
-                  <Copy size={16} />
-                  {copiedMessage ? 'Copied!' : 'Copy'}
-                </button>
-              </div>
-              <pre className="bg-gray-50 p-3 rounded text-xs text-gray-800 whitespace-pre-wrap font-mono leading-relaxed">
-                {generateWhatsAppMessage()}
-              </pre>
-            </div>
+            {currentSession && (() => {
+              const inCount = players.filter(p => currentSession.playerAttendance[p.id]?.attended).length;
+              const paidCount = players.filter(p => currentSession.playerAttendance[p.id]?.paid).length;
+              return (
+                <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-blue-500">
+                  <p className="text-gray-600 text-xs font-semibold uppercase tracking-wide">This Week</p>
+                  <p className="text-3xl font-bold text-gray-900 mt-2">{inCount} <span className="text-lg font-medium text-gray-500">in</span></p>
+                  <p className="text-sm text-gray-500 mt-1">{paidCount} paid · {inCount - paidCount} unpaid</p>
+                </div>
+              );
+            })()}
 
             {currentSession && (
               <div className="bg-white p-4 rounded-lg shadow-sm">
@@ -567,6 +566,20 @@ const FNFApp = () => {
         {/* Settings Tab */}
         {activeTab === 'settings' && (
           <div className="space-y-4">
+            {/* WhatsApp message */}
+            <div className="bg-white p-4 rounded-lg shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-semibold text-gray-900">WhatsApp Message</h2>
+                <button onClick={copyToClipboard} className="flex items-center gap-2 text-green-600 hover:text-green-700 text-sm font-medium">
+                  <Copy size={16} />
+                  {copiedMessage ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+              <pre className="bg-gray-50 p-3 rounded text-xs text-gray-800 whitespace-pre-wrap font-mono leading-relaxed">
+                {generateWhatsAppMessage()}
+              </pre>
+            </div>
+
             <div className="bg-white p-4 rounded-lg shadow-sm">
               <h2 className="font-semibold text-gray-900 mb-4">Pricing</h2>
               <div className="space-y-4">
