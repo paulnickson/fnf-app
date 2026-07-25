@@ -5,6 +5,23 @@ import { Copy, ChevronDown, ChevronUp, Trash2, Plus, X } from 'lucide-react';
 const computeBalance = (ledger = []) =>
   ledger.reduce((sum, e) => sum + e.amount, 0);
 
+const EditName = ({ player, onSave }) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(player.name);
+  const save = () => { if (draft.trim()) { onSave(draft.trim()); setEditing(false); } };
+  if (!editing) return (
+    <button onClick={() => { setDraft(player.name); setEditing(true); }} className="text-sm text-green-600 font-medium">Edit name</button>
+  );
+  return (
+    <div className="flex gap-2">
+      <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && save()}
+        className="flex-1 px-3 py-1 border border-gray-300 rounded text-sm" />
+      <button onClick={save} className="bg-green-600 text-white px-3 py-1 rounded text-sm font-semibold">Save</button>
+      <button onClick={() => setEditing(false)} className="bg-gray-200 text-gray-600 px-3 py-1 rounded text-sm">Cancel</button>
+    </div>
+  );
+};
+
 const FNFApp = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sessions, setSessions] = useState([]);
@@ -388,9 +405,11 @@ const FNFApp = () => {
                       </button>
                     </div>
 
-                    {/* Expanded: ledger + add entry */}
+                    {/* Expanded: edit name + ledger + add entry */}
                     {isExpanded && (
                       <div className="border-t border-gray-100 bg-gray-50 p-4 space-y-3">
+                        {/* Edit name */}
+                        <EditName player={player} onSave={(name) => setPlayers(players.map(p => p.id === player.id ? { ...p, name } : p))} />
                         {/* Ledger entries */}
                         {(player.ledger || []).length === 0 ? (
                           <p className="text-sm text-gray-400">No entries yet</p>
