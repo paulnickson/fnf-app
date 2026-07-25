@@ -33,6 +33,7 @@ const FNFApp = () => {
   const [expandedPlayer, setExpandedPlayer] = useState(null);
   const [copiedMessage, setCopiedMessage] = useState(false);
   const [playerFilter, setPlayerFilter] = useState('all');
+  const [sessionFilter, setSessionFilter] = useState('all');
   const [settings, setSettings] = useState({ playerFee: 8, pitchCost: 104 });
   const [settingsDraft, setSettingsDraft] = useState({ playerFee: 8, pitchCost: 104 });
   const [settingsSaved, setSettingsSaved] = useState(false);
@@ -251,25 +252,27 @@ const FNFApp = () => {
         {/* Dashboard Tab */}
         {activeTab === 'dashboard' && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-600">
-                <p className="text-gray-600 text-xs font-semibold uppercase tracking-wide">Bank Balance</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">£{bankBalance}</p>
-              </div>
-              <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-orange-500">
-                <p className="text-gray-600 text-xs font-semibold uppercase tracking-wide">Amount Owed</p>
-                <p className="text-3xl font-bold text-orange-600 mt-2">£{totalOwed}</p>
-              </div>
-            </div>
-
-            {currentSession && (() => {
-              const inCount = players.filter(p => currentSession.playerAttendance[p.id]?.attended).length;
-              const paidCount = players.filter(p => currentSession.playerAttendance[p.id]?.paid).length;
+            {/* Top summary cards */}
+            {(() => {
+              const inCount = currentSession ? players.filter(p => currentSession.playerAttendance[p.id]?.attended).length : null;
+              const paidCount = currentSession ? players.filter(p => currentSession.playerAttendance[p.id]?.paid).length : null;
               return (
-                <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-blue-500">
-                  <p className="text-gray-600 text-xs font-semibold uppercase tracking-wide">This Week</p>
-                  <p className="text-3xl font-bold text-gray-900 mt-2">{inCount} <span className="text-lg font-medium text-gray-500">in</span></p>
-                  <p className="text-sm text-gray-500 mt-1">{paidCount} paid · {inCount - paidCount} unpaid</p>
+                <div className={`grid gap-3 ${currentSession ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                  <div className="bg-white p-3 rounded-lg shadow-sm border-l-4 border-green-600">
+                    <p className="text-gray-600 text-xs font-semibold uppercase tracking-wide">Bank</p>
+                    <p className="text-2xl font-bold text-gray-900 mt-1">£{bankBalance}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded-lg shadow-sm border-l-4 border-orange-500">
+                    <p className="text-gray-600 text-xs font-semibold uppercase tracking-wide">Owed</p>
+                    <p className="text-2xl font-bold text-orange-600 mt-1">£{totalOwed}</p>
+                  </div>
+                  {currentSession && (
+                    <div className="bg-white p-3 rounded-lg shadow-sm border-l-4 border-blue-500">
+                      <p className="text-gray-600 text-xs font-semibold uppercase tracking-wide">This Week</p>
+                      <p className="text-2xl font-bold text-gray-900 mt-1">{inCount} <span className="text-sm font-medium text-gray-500">in</span></p>
+                      <p className="text-xs text-gray-500 mt-0.5">{paidCount} paid</p>
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -301,8 +304,37 @@ const FNFApp = () => {
                     </button>
                   )}
                 </div>
+
+                {/* Player filter */}
+                {(() => {
+                  const inCount = players.filter(p => currentSession.playerAttendance[p.id]?.attended).length;
+                  const unpaidCount = players.filter(p => currentSession.playerAttendance[p.id]?.attended && !currentSession.playerAttendance[p.id]?.paid).length;
+                  return (
+                    <div className="flex rounded-lg overflow-hidden border border-gray-200 mb-3">
+                      {[
+                        { id: 'all', label: `All (${players.length})` },
+                        { id: 'playing', label: `Playing (${inCount})` },
+                        { id: 'unpaid', label: `Unpaid (${unpaidCount})` },
+                      ].map(f => (
+                        <button key={f.id} onClick={() => setSessionFilter(f.id)}
+                          className={`flex-1 py-1.5 text-xs font-medium transition ${sessionFilter === f.id ? 'bg-green-600 text-white' : 'text-gray-600 bg-white hover:bg-gray-50'}`}>
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
+
                 <div className="space-y-2 mb-4">
-                  {players.map(player => (
+                  {players
+                    .filter(player => {
+                      const att = currentSession.playerAttendance[player.id];
+                      if (sessionFilter === 'playing') return att?.attended;
+                      if (sessionFilter === 'unpaid') return att?.attended && !att?.paid;
+                      return true;
+                    })
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map(player => (
                     <div key={player.id} className="flex items-center justify-between p-2 bg-gray-50 rounded border border-gray-200">
                       <span className="font-medium text-gray-900">{player.name}</span>
                       <div className="flex gap-2">
