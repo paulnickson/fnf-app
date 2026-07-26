@@ -43,6 +43,8 @@ const FNFApp = () => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+  const [invoicePayments, setInvoicePayments] = useState([]);
+  const [confirmingPayment, setConfirmingPayment] = useState(null); // { month, amount }
   const [editingSessionDate, setEditingSessionDate] = useState(false);
   const [newSessionDate, setNewSessionDate] = useState('');
   // Manual entry form state
@@ -72,13 +74,14 @@ const FNFApp = () => {
         setSettings(data.settings);
         setSettingsDraft(data.settings);
       }
+      if (data.invoicePayments) setInvoicePayments(data.invoicePayments);
     } else {
       initializeDemo();
     }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('fnfData', JSON.stringify({ players, sessions, bankBalance, settings }));
+    localStorage.setItem('fnfData', JSON.stringify({ players, sessions, bankBalance, settings, invoicePayments }));
   }, [players, sessions, bankBalance, settings]);
 
   const initializeDemo = () => {
@@ -233,6 +236,12 @@ const FNFApp = () => {
     lines.push('');
     lines.push(`Total outstanding: £${overdue.reduce((sum, p) => sum + Math.abs(computeBalance(p.ledger)), 0)}`);
     return lines.join('\n');
+  };
+
+  const recordInvoicePayment = (month, amount) => {
+    setInvoicePayments(prev => [...prev, { id: Date.now().toString(), month, amount, paidOn: today }]);
+    setBankBalance(prev => prev - amount);
+    setConfirmingPayment(null);
   };
 
   const getFridaysInMonth = (year, month) => {
@@ -600,9 +609,11 @@ const FNFApp = () => {
         {activeTab === 'history' && (
           <div className="space-y-3">
 
-            {/* Invoice dispute tool */}
+            {/* Invoice tool */}
             {(() => {
               const inv = getInvoiceData();
+              const amountDue = inv.cancelled.length > 0 ? inv.revisedCost : inv.fullCost;
+              const alreadyPaid = invoicePayments.find(p => p.month === invoiceMonth);
               return (
                 <div className="bg-white rounded-lg shadow-sm overflow-hidden">
                   <div className="p-4 border-b border-gray-100">
@@ -611,7 +622,7 @@ const FNFApp = () => {
                       <input
                         type="month"
                         value={invoiceMonth}
-                        onChange={(e) => { setInvoiceMonth(e.target.value); setInvoiceCopied(false); }}
+                        onChange={(e) => { setInvoiceMonth(e.target.value); setInvoiceCopied(false); setConfirmingPayment(null); }}
                         className="border border-gray-300 rounded px-2 py-1 text-sm text-gray-700"
                       />
                     </div>
@@ -626,24 +637,48 @@ const FNFApp = () => {
                           <span>−£{inv.discount}</span>
                         </div>
                       )}
-                      {inv.cancelled.length > 0 && (
-                        <div className="flex justify-between font-semibold text-green-700 border-t border-gray-100 pt-1">
-                          <span>Revised invoice</span>
-                          <span>£{inv.revisedCost}</span>
-                        </div>
-                      )}
+                      <div className={`flex justify-between font-semibold border-t border-gray-100 pt-1 ${inv.cancelled.length > 0 ? 'text-green-700' : 'text-gray-800'}`}>
+                        <span>{inv.cancelled.length > 0 ? 'Revised invoice' : 'Invoice total'}</span>
+                        <span>£{amountDue}</span>
+                      </div>
                     </div>
                   </div>
-                  {inv.message ? (
-                    <button
-                      onClick={() => { navigator.clipboard.writeText(inv.message); setInvoiceCopied(true); setTimeout(() => setInvoiceCopied(false), 2000); }}
-                      className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium text-green-600 hover:bg-gray-50 transition"
-                    >
-                      <Copy size={15} />
-                      {invoiceCopied ? 'Copied!' : 'Copy dispute message'}
-                    </button>
+
+                  {/* Actions */}
+                  {alreadyPaid ? (
+                    <div className="px-4 py-3 flex items-center justify-between">
+                      <span className="text-sm text-green-700 font-medium">✓ Paid £{alreadyPaid.amount} on {formatDate(alreadyPaid.paidOn)}</span>
+                      <button onClick={() => { setInvoicePayments(prev => prev.filter(p => p.id !== alreadyPaid.id)); setBankBalance(prev => prev + alreadyPaid.amount); }}
+                        className="text-xs text-gray-400 hover:text-red-500">Undo</button>
+                    </div>
+                  ) : confirmingPayment?.month === invoiceMonth ? (
+                    <div className="p-4 border-t border-gray-100 space-y-2">
+                      <p className="text-sm text-gray-700">Record payment of <strong>£{confirmingPayment.amount}</strong>? This will deduct it from the bank balance.</p>
+                      <div className="flex gap-2">
+                        <button onClick={() => recordInvoicePayment(invoiceMonth, confirmingPayment.amount)}
+                          className="flex-1 bg-green-600 text-white py-2 rounded text-sm font-semibold hover:bg-green-700">Confirm</button>
+                        <button onClick={() => setConfirmingPayment(null)}
+                          className="flex-1 bg-gray-200 text-gray-600 py-2 rounded text-sm font-semibold">Cancel</button>
+                      </div>
+                    </div>
                   ) : (
-                    <p className="text-center text-sm text-gray-400 py-3">No cancellations in {inv.prevMonthName} — no dispute needed</p>
+                    <div className="flex border-t border-gray-100">
+                      {inv.message && (
+                        <button
+                          onClick={() => { navigator.clipboard.writeText(inv.message); setInvoiceCopied(true); setTimeout(() => setInvoiceCopied(false), 2000); }}
+                          className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium text-green-600 hover:bg-gray-50 transition border-r border-gray-100"
+                        >
+                          <Copy size={15} />
+                          {invoiceCopied ? 'Copied!' : 'Copy dispute'}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setConfirmingPayment({ month: invoiceMonth, amount: amountDue })}
+                        className="flex-1 flex items-center justify-center py-3 text-sm font-medium text-blue-600 hover:bg-gray-50 transition"
+                      >
+                        Record payment
+                      </button>
+                    </div>
                   )}
                 </div>
               );
