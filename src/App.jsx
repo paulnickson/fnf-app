@@ -212,10 +212,19 @@ const FNFApp = () => {
   };
 
   const generateWhatsAppMessage = () => {
-    const overdue = players.filter(p => computeBalance(p.ledger) < 0);
+    const overdue = players.filter(p => computeBalance(p.ledger) < 0)
+      .sort((a, b) => a.name.localeCompare(b.name));
     if (overdue.length === 0) return 'All payments up to date!';
     const lines = ['Friday Night Football - outstanding balances', ''];
-    overdue.forEach(p => { lines.push(`${p.name} - £${Math.abs(computeBalance(p.ledger))}`); });
+    overdue.forEach(p => {
+      const debts = (p.ledger || []).filter(e => e.amount < 0);
+      const total = Math.abs(computeBalance(p.ledger));
+      const dates = debts
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map(e => new Date(e.date + 'T00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }))
+        .join(', ');
+      lines.push(`${p.name} - £${total}${dates ? ` (${dates})` : ''}`);
+    });
     lines.push('');
     lines.push(`Total outstanding: £${overdue.reduce((sum, p) => sum + Math.abs(computeBalance(p.ledger)), 0)}`);
     return lines.join('\n');
