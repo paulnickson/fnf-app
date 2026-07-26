@@ -1,5 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Copy, ChevronDown, ChevronUp, Trash2, Plus, X } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  'https://sbznyuwjyaklielcznlv.supabase.co',
+  'sb_publishable_-wrAqCXtcQttCd6cM9diKQ_Sb1_pNz_'
+);
 
 // Compute balance from ledger
 const computeBalance = (ledger = []) =>
@@ -96,6 +102,8 @@ const FNFApp = () => {
   const [entryDraft, setEntryDraft] = useState({ date: '', amount: '', label: '', type: 'debt' });
 
   const today = new Date().toISOString().split('T')[0];
+  const [loading, setLoading] = useState(true);
+  const initialized = useRef(false);
 
   // Migrate old player format (balance only → ledger)
   const migratePlayer = (p) => {
@@ -106,27 +114,70 @@ const FNFApp = () => {
     return { ...p, ledger };
   };
 
+  // Load from Supabase on mount, fall back to localStorage
   useEffect(() => {
-    const saved = localStorage.getItem('fnfData');
-    if (saved) {
-      const data = JSON.parse(saved);
-      const migrated = (data.players || []).map(migratePlayer);
-      setPlayers(migrated);
-      setSessions(data.sessions || []);
-      setBankBalance(data.bankBalance || 0);
-      if (data.settings) {
-        setSettings(data.settings);
-        setSettingsDraft(data.settings);
+    const load = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('app_data')
+          .select('value')
+          .eq('key', 'state')
+          .single();
+
+        if (data?.value) {
+          const d = data.value;
+          const migrated = (d.players || []).map(migratePlayer);
+          setPlayers(migrated);
+          setSessions(d.sessions || []);
+          setBankBalance(d.bankBalance || 0);
+          if (d.settings) { setSettings(d.settings); setSettingsDraft(d.settings); }
+          if (d.invoicePayments) setInvoicePayments(d.invoicePayments);
+        } else {
+          // Fall back to localStorage
+          const saved = localStorage.getItem('fnfData');
+          if (saved) {
+            const d = JSON.parse(saved);
+            const migrated = (d.players || []).map(migratePlayer);
+            setPlayers(migrated);
+            setSessions(d.sessions || []);
+            setBankBalance(d.bankBalance || 0);
+            if (d.settings) { setSettings(d.settings); setSettingsDraft(d.settings); }
+            if (d.invoicePayments) setInvoicePayments(d.invoicePayments);
+          } else {
+            initializeDemo();
+          }
+        }
+      } catch (err) {
+        // Offline — fall back to localStorage
+        const saved = localStorage.getItem('fnfData');
+        if (saved) {
+          const d = JSON.parse(saved);
+          const migrated = (d.players || []).map(migratePlayer);
+          setPlayers(migrated);
+          setSessions(d.sessions || []);
+          setBankBalance(d.bankBalance || 0);
+          if (d.settings) { setSettings(d.settings); setSettingsDraft(d.settings); }
+          if (d.invoicePayments) setInvoicePayments(d.invoicePayments);
+        } else {
+          initializeDemo();
+        }
+      } finally {
+        initialized.current = true;
+        setLoading(false);
       }
-      if (data.invoicePayments) setInvoicePayments(data.invoicePayments);
-    } else {
-      initializeDemo();
-    }
+    };
+    load();
   }, []);
 
+  // Save to Supabase + localStorage whenever state changes
   useEffect(() => {
-    localStorage.setItem('fnfData', JSON.stringify({ players, sessions, bankBalance, settings, invoicePayments }));
-  }, [players, sessions, bankBalance, settings]);
+    if (!initialized.current) return;
+    const state = { players, sessions, bankBalance, settings, invoicePayments };
+    localStorage.setItem('fnfData', JSON.stringify(state));
+    supabase.from('app_data').upsert({ key: 'state', value: state, updated_at: new Date().toISOString() }).then(({ error }) => {
+      if (error) console.error('Supabase save error:', error);
+    });
+  }, [players, sessions, bankBalance, settings, invoicePayments]);
 
   const initializeDemo = () => {
     const lastFriday = new Date();
@@ -356,6 +407,15 @@ const FNFApp = () => {
 
   const formatDate = (dateStr) =>
     new Date(dateStr + 'T00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+  if (loading) return (
+    <div className="bg-gray-50 min-h-screen flex items-center justify-center">
+      <div className="text-center">
+        <div className="text-3xl mb-3">⚽</div>
+        <p className="text-gray-500 text-sm">Loading FNF...</p>
+      </div>
+    </div>
+  );
 
   return (
     <div className="bg-gray-50 min-h-screen">
