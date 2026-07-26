@@ -37,7 +37,12 @@ const FNFApp = () => {
   const [settings, setSettings] = useState({ playerFee: 8, pitchCost: 104 });
   const [settingsDraft, setSettingsDraft] = useState({ playerFee: 8, pitchCost: 104 });
   const [settingsSaved, setSettingsSaved] = useState(false);
-  const [closeModal, setCloseModal] = useState(null); // { collected, pitchCost, net, newBalance, attendeeCount, unpaidCount }
+  const [closeModal, setCloseModal] = useState(null);
+  const [invoiceCopied, setInvoiceCopied] = useState(false);
+  const [invoiceMonth, setInvoiceMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
   const [editingSessionDate, setEditingSessionDate] = useState(false);
   const [newSessionDate, setNewSessionDate] = useState('');
   // Manual entry form state
@@ -228,6 +233,53 @@ const FNFApp = () => {
     lines.push('');
     lines.push(`Total outstanding: £${overdue.reduce((sum, p) => sum + Math.abs(computeBalance(p.ledger)), 0)}`);
     return lines.join('\n');
+  };
+
+  const getFridaysInMonth = (year, month) => {
+    const fridays = [];
+    const d = new Date(year, month, 1);
+    while (d.getMonth() === month) {
+      if (d.getDay() === 5) fridays.push(new Date(d));
+      d.setDate(d.getDate() + 1);
+    }
+    return fridays;
+  };
+
+  const getInvoiceData = () => {
+    const [year, month] = invoiceMonth.split('-').map(Number);
+    const invoiceDate = new Date(year, month - 1, 1);
+
+    // Previous month
+    const prevDate = new Date(year, month - 2, 1);
+    const prevYear = prevDate.getFullYear();
+    const prevMonth = prevDate.getMonth(); // 0-indexed
+
+    // Cancelled sessions in previous month
+    const cancelled = sessions.filter(s => {
+      if (s.status !== 'cancelled') return false;
+      const d = new Date(s.date + 'T00:00');
+      return d.getFullYear() === prevYear && d.getMonth() === prevMonth;
+    });
+
+    // Fridays in invoice month
+    const fridays = getFridaysInMonth(year, month - 1);
+    const fullCost = fridays.length * settings.pitchCost;
+    const discount = cancelled.length * settings.pitchCost;
+    const revisedCost = fullCost - discount;
+
+    const prevMonthName = prevDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    const invoiceMonthName = invoiceDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+
+    const cancelledDates = cancelled
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map(s => new Date(s.date + 'T00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }))
+      .join(', ');
+
+    const message = cancelled.length === 0
+      ? null
+      : `Hi, we had ${cancelled.length} cancelled session${cancelled.length > 1 ? 's' : ''} in ${prevMonthName} (${cancelledDates}). Please reduce our ${invoiceMonthName} invoice by £${discount} — charge for ${fridays.length - cancelled.length} week${fridays.length - cancelled.length !== 1 ? 's' : ''} (£${revisedCost}) instead of ${fridays.length} (£${fullCost}).`;
+
+    return { cancelled, fridays, fullCost, discount, revisedCost, prevMonthName, invoiceMonthName, message };
   };
 
   const copyToClipboard = () => {
@@ -547,6 +599,56 @@ const FNFApp = () => {
         {/* History Tab */}
         {activeTab === 'history' && (
           <div className="space-y-3">
+
+            {/* Invoice dispute tool */}
+            {(() => {
+              const inv = getInvoiceData();
+              return (
+                <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+                  <div className="p-4 border-b border-gray-100">
+                    <div className="flex items-center justify-between mb-3">
+                      <h2 className="font-semibold text-gray-900">Invoice</h2>
+                      <input
+                        type="month"
+                        value={invoiceMonth}
+                        onChange={(e) => { setInvoiceMonth(e.target.value); setInvoiceCopied(false); }}
+                        className="border border-gray-300 rounded px-2 py-1 text-sm text-gray-700"
+                      />
+                    </div>
+                    <div className="text-sm text-gray-600 space-y-1">
+                      <div className="flex justify-between">
+                        <span>{inv.invoiceMonthName} ({inv.fridays.length} Fridays)</span>
+                        <span className="font-medium text-gray-900">£{inv.fullCost}</span>
+                      </div>
+                      {inv.cancelled.length > 0 && (
+                        <div className="flex justify-between text-orange-600">
+                          <span>{inv.cancelled.length} cancellation{inv.cancelled.length > 1 ? 's' : ''} in {inv.prevMonthName}</span>
+                          <span>−£{inv.discount}</span>
+                        </div>
+                      )}
+                      {inv.cancelled.length > 0 && (
+                        <div className="flex justify-between font-semibold text-green-700 border-t border-gray-100 pt-1">
+                          <span>Revised invoice</span>
+                          <span>£{inv.revisedCost}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {inv.message ? (
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(inv.message); setInvoiceCopied(true); setTimeout(() => setInvoiceCopied(false), 2000); }}
+                      className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium text-green-600 hover:bg-gray-50 transition"
+                    >
+                      <Copy size={15} />
+                      {invoiceCopied ? 'Copied!' : 'Copy dispute message'}
+                    </button>
+                  ) : (
+                    <p className="text-center text-sm text-gray-400 py-3">No cancellations in {inv.prevMonthName} — no dispute needed</p>
+                  )}
+                </div>
+              );
+            })()}
+
             <div className="bg-white p-3 rounded-lg shadow-sm flex items-center gap-2">
               <input
                 type="date"
