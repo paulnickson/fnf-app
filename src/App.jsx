@@ -72,6 +72,7 @@ const FNFApp = () => {
   const [showNewPlayer, setShowNewPlayer] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
   const [expandedSession, setExpandedSession] = useState(null);
+  const [expandedMonth, setExpandedMonth] = useState(null);
   const [expandedPlayer, setExpandedPlayer] = useState(null);
   const [copiedMessage, setCopiedMessage] = useState(false);
   const [playerFilter, setPlayerFilter] = useState('all');
@@ -80,7 +81,7 @@ const FNFApp = () => {
   const [settingsDraft, setSettingsDraft] = useState({ playerFee: 8, pitchCost: 104 });
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [closeModal, setCloseModal] = useState(null);
-  const [invoiceCopied, setInvoiceCopied] = useState(false);
+  const [invoiceCopied, setInvoiceCopied] = useState(null);
   const [invoiceMonth, setInvoiceMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -668,161 +669,183 @@ const FNFApp = () => {
         {/* History Tab */}
         {activeTab === 'history' && (
           <div className="space-y-3">
-
-            {/* Invoice tool */}
-            {(() => {
-              const inv = getInvoiceData();
-              const amountDue = inv.cancelled.length > 0 ? inv.revisedCost : inv.fullCost;
-              const alreadyPaid = invoicePayments.find(p => p.month === invoiceMonth);
-              return (
-                <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-                  <div className="p-4 border-b border-gray-100">
-                    <div className="flex items-center justify-between mb-3">
-                      <h2 className="font-semibold text-gray-900">Invoice</h2>
-                      <input
-                        type="month"
-                        value={invoiceMonth}
-                        onChange={(e) => { setInvoiceMonth(e.target.value); setInvoiceCopied(false); setConfirmingPayment(null); }}
-                        className="border border-gray-300 rounded px-2 py-1 text-sm text-gray-700"
-                      />
-                    </div>
-                    <div className="text-sm text-gray-600 space-y-1">
-                      <div className="flex justify-between">
-                        <span>{inv.invoiceMonthName} ({inv.fridays.length} Fridays)</span>
-                        <span className="font-medium text-gray-900">£{inv.fullCost}</span>
-                      </div>
-                      {inv.cancelled.length > 0 && (
-                        <div className="flex justify-between text-orange-600">
-                          <span>{inv.cancelled.length} cancellation{inv.cancelled.length > 1 ? 's' : ''} in {inv.prevMonthName}</span>
-                          <span>−£{inv.discount}</span>
-                        </div>
-                      )}
-                      <div className={`flex justify-between font-semibold border-t border-gray-100 pt-1 ${inv.cancelled.length > 0 ? 'text-green-700' : 'text-gray-800'}`}>
-                        <span>{inv.cancelled.length > 0 ? 'Revised invoice' : 'Invoice total'}</span>
-                        <span>£{amountDue}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  {alreadyPaid ? (
-                    <div className="px-4 py-3 flex items-center justify-between">
-                      <span className="text-sm text-green-700 font-medium">✓ Paid £{alreadyPaid.amount} on {formatDate(alreadyPaid.paidOn)}</span>
-                      <button onClick={() => { setInvoicePayments(prev => prev.filter(p => p.id !== alreadyPaid.id)); setBankBalance(prev => prev + alreadyPaid.amount); }}
-                        className="text-xs text-gray-400 hover:text-red-500">Undo</button>
-                    </div>
-                  ) : confirmingPayment?.month === invoiceMonth ? (
-                    <div className="p-4 border-t border-gray-100 space-y-2">
-                      <p className="text-sm text-gray-700">Record payment of <strong>£{confirmingPayment.amount}</strong>? This will deduct it from the bank balance.</p>
-                      <div className="flex gap-2">
-                        <button onClick={() => recordInvoicePayment(invoiceMonth, confirmingPayment.amount)}
-                          className="flex-1 bg-green-600 text-white py-2 rounded text-sm font-semibold hover:bg-green-700">Confirm</button>
-                        <button onClick={() => setConfirmingPayment(null)}
-                          className="flex-1 bg-gray-200 text-gray-600 py-2 rounded text-sm font-semibold">Cancel</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex border-t border-gray-100">
-                      {inv.message && (
-                        <button
-                          onClick={() => { navigator.clipboard.writeText(inv.message); setInvoiceCopied(true); setTimeout(() => setInvoiceCopied(false), 2000); }}
-                          className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium text-green-600 hover:bg-gray-50 transition border-r border-gray-100"
-                        >
-                          <Copy size={15} />
-                          {invoiceCopied ? 'Copied!' : 'Copy dispute'}
-                        </button>
-                      )}
-                      <button
-                        onClick={() => setConfirmingPayment({ month: invoiceMonth, amount: amountDue })}
-                        className="flex-1 flex items-center justify-center py-3 text-sm font-medium text-blue-600 hover:bg-gray-50 transition"
-                      >
-                        Record payment
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
+            {/* Create Week */}
             <div className="bg-white p-3 rounded-lg shadow-sm flex items-center gap-2">
-              <input
-                type="date"
-                defaultValue={nextFridayDate()}
-                onChange={(e) => setNewSessionDate(e.target.value)}
-                className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm"
-              />
-              <button
-                onClick={() => createNewSession(newSessionDate || nextFridayDate())}
-                className="bg-green-600 text-white px-4 py-2 rounded font-semibold hover:bg-green-700 transition text-sm whitespace-nowrap"
-              >Create Week</button>
+              <input type="date" defaultValue={nextFridayDate()} onChange={(e) => setNewSessionDate(e.target.value)}
+                className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm" />
+              <button onClick={() => createNewSession(newSessionDate || nextFridayDate())}
+                className="bg-green-600 text-white px-4 py-2 rounded font-semibold hover:bg-green-700 transition text-sm whitespace-nowrap">Create Week</button>
             </div>
-            {pastSessions.map(session => (
-              <div key={session.id} className="bg-white rounded-lg shadow-sm overflow-hidden">
-                <button
-                  onClick={() => setExpandedSession(expandedSession === session.id ? null : session.id)}
-                  className="w-full p-4 flex items-center justify-between hover:bg-gray-50 transition"
-                >
-                  <div className="flex items-center gap-3">
-                    {expandedSession === session.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                    <div className="text-left">
-                      <p className="font-semibold text-gray-900">
-                        {new Date(session.date + 'T00:00').toLocaleDateString('en-GB', { weekday: 'short', month: 'short', day: 'numeric' })}
-                      </p>
-                      <p className="text-sm text-gray-600 capitalize">{session.status}</p>
-                    </div>
-                  </div>
-                  {session.status === 'closed' && (
-                    <div className="text-right">
-                      <p className="font-semibold text-green-600">£{session.collected}</p>
-                      <p className="text-xs text-gray-400">{session.attendeeCount} players</p>
-                    </div>
-                  )}
-                </button>
-                {expandedSession === session.id && (
-                  <div className="bg-gray-50 p-4 border-t border-gray-200">
-                    {session.status === 'cancelled' ? (
-                      <div className="space-y-2">
-                        <p className="text-sm text-gray-600">
-                          Cancelled{session.cancelReason ? ` — ${session.cancelReason}` : ''}
-                        </p>
-                        <button
-                          onClick={() => reopenSession(session.id)}
-                          className="text-sm text-green-600 font-medium hover:text-green-700"
-                        >Reopen session</button>
+
+            {/* Month cards */}
+            {(() => {
+              // Collect all months from past sessions + invoice payments
+              const monthSet = new Set();
+              pastSessions.forEach(s => monthSet.add(s.date.slice(0, 7)));
+              invoicePayments.forEach(p => monthSet.add(p.month));
+              const months = [...monthSet].sort((a, b) => b.localeCompare(a)); // newest first
+
+              if (months.length === 0) return <p className="text-center text-gray-400 py-8 text-sm">No history yet</p>;
+
+              return months.map(monthKey => {
+                const [yr, mo] = monthKey.split('-').map(Number);
+                const monthDate = new Date(yr, mo - 1, 1);
+                const monthName = monthDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+                const fridays = getFridaysInMonth(yr, mo - 1);
+
+                // Previous month cancellations affecting this invoice
+                const prevDate = new Date(yr, mo - 2, 1);
+                const prevMonthKey = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+                const prevMonthName = prevDate.toLocaleDateString('en-GB', { month: 'long' });
+                const prevCancelled = sessions.filter(s => s.status === 'cancelled' && s.date.startsWith(prevMonthKey));
+                const discount = prevCancelled.length * settings.pitchCost;
+                const fullCost = fridays.length * settings.pitchCost;
+                const invoiceAmount = fullCost - discount;
+
+                const invoicePayment = invoicePayments.find(p => p.month === monthKey);
+                const monthSessions = pastSessions.filter(s => s.date.startsWith(monthKey))
+                  .sort((a, b) => a.date.localeCompare(b.date));
+                const isExpanded = expandedMonth === monthKey;
+
+                // Dispute message
+                const disputeMsg = prevCancelled.length > 0
+                  ? `Hi, we had ${prevCancelled.length} cancelled session${prevCancelled.length > 1 ? 's' : ''} in ${prevMonthName} (${prevCancelled.sort((a,b) => a.date.localeCompare(b.date)).map(s => new Date(s.date + 'T00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })).join(', ')}). Please reduce our ${monthDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })} invoice by £${discount} — charge for ${fridays.length - prevCancelled.length} week${fridays.length - prevCancelled.length !== 1 ? 's' : ''} (£${invoiceAmount}) instead of ${fridays.length} (£${fullCost}).`
+                  : null;
+
+                return (
+                  <div key={monthKey} className="bg-white rounded-lg shadow-sm overflow-hidden">
+                    {/* Month header */}
+                    <button onClick={() => setExpandedMonth(isExpanded ? null : monthKey)}
+                      className="w-full p-4 flex items-center justify-between hover:bg-gray-50 transition">
+                      <div className="flex items-center gap-3">
+                        {isExpanded ? <ChevronUp size={20} className="text-gray-400 flex-shrink-0" /> : <ChevronDown size={20} className="text-gray-400 flex-shrink-0" />}
+                        <div className="text-left">
+                          <p className="font-semibold text-gray-900">{monthName}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {monthSessions.filter(s => s.status === 'closed').length} played
+                            {monthSessions.filter(s => s.status === 'cancelled').length > 0 && ` · ${monthSessions.filter(s => s.status === 'cancelled').length} cancelled`}
+                          </p>
+                        </div>
                       </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {session.collected !== undefined && (
-                          <div className="text-sm bg-white rounded p-3 border border-gray-200">
-                            <div className="flex justify-between font-semibold text-green-700">
-                              <span>Transferred to bank ({session.attendeeCount} × £{Math.round(session.collected / session.attendeeCount)})</span>
-                              <span>£{session.collected}</span>
+                      <div className="text-right">
+                        {invoicePayment
+                          ? <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded font-medium">Invoice paid £{invoicePayment.amount}</span>
+                          : <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded">Invoice unpaid</span>
+                        }
+                      </div>
+                    </button>
+
+                    {/* Expanded content */}
+                    {isExpanded && (
+                      <div className="border-t border-gray-100">
+                        {/* Invoice section */}
+                        <div className="p-4 bg-gray-50 space-y-2 border-b border-gray-100">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Invoice</p>
+                          <div className="text-sm space-y-1">
+                            <div className="flex justify-between text-gray-700">
+                              <span>{fridays.length} Fridays × £{settings.pitchCost}</span>
+                              <span>£{fullCost}</span>
+                            </div>
+                            {prevCancelled.length > 0 && (
+                              <div className="flex justify-between text-orange-600">
+                                <span>{prevCancelled.length} cancellation{prevCancelled.length > 1 ? 's' : ''} from {prevMonthName}</span>
+                                <span>−£{discount}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between font-semibold text-gray-900 border-t border-gray-200 pt-1">
+                              <span>Total due</span>
+                              <span>£{invoiceAmount}</span>
                             </div>
                           </div>
-                        )}
-                        <div className="space-y-2 text-sm">
-                          {players
-                            .filter(p => session.playerAttendance[p.id]?.attended)
-                            .sort((a, b) => a.name.localeCompare(b.name))
-                            .map(p => {
-                              const att = session.playerAttendance[p.id];
-                              return (
-                                <div key={p.id} className="flex justify-between items-center">
-                                  <span className="text-gray-900">{p.name}</span>
-                                  <span className={`text-xs px-2 py-1 rounded ${att.paid ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'}`}>
-                                    {att.paid ? 'Paid' : 'Unpaid'}
-                                  </span>
+
+                          {invoicePayment ? (
+                            <div className="flex items-center justify-between pt-1">
+                              <span className="text-sm text-green-700 font-medium">✓ Paid £{invoicePayment.amount} on {formatDate(invoicePayment.paidOn)}</span>
+                              <button onClick={() => { setInvoicePayments(prev => prev.filter(p => p.id !== invoicePayment.id)); setBankBalance(prev => prev + invoicePayment.amount); }}
+                                className="text-xs text-gray-400 hover:text-red-500">Undo</button>
+                            </div>
+                          ) : confirmingPayment?.month === monthKey ? (
+                            <div className="space-y-2 pt-1">
+                              <p className="text-sm text-gray-700">Record payment of <strong>£{confirmingPayment.amount}</strong>?</p>
+                              <div className="flex gap-2">
+                                <button onClick={() => recordInvoicePayment(monthKey, confirmingPayment.amount)}
+                                  className="flex-1 bg-green-600 text-white py-1.5 rounded text-sm font-semibold">Confirm</button>
+                                <button onClick={() => setConfirmingPayment(null)}
+                                  className="flex-1 bg-gray-200 text-gray-600 py-1.5 rounded text-sm font-semibold">Cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex gap-2 pt-1">
+                              {disputeMsg && (
+                                <button onClick={() => { navigator.clipboard.writeText(disputeMsg); setInvoiceCopied(monthKey); setTimeout(() => setInvoiceCopied(null), 2000); }}
+                                  className="flex-1 flex items-center justify-center gap-1 py-1.5 text-sm font-medium text-green-600 bg-white border border-green-200 rounded hover:bg-green-50">
+                                  <Copy size={13} />{invoiceCopied === monthKey ? 'Copied!' : 'Copy dispute'}
+                                </button>
+                              )}
+                              <button onClick={() => setConfirmingPayment({ month: monthKey, amount: invoiceAmount })}
+                                className="flex-1 py-1.5 text-sm font-medium text-blue-600 bg-white border border-blue-200 rounded hover:bg-blue-50">
+                                Record payment
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Sessions in this month */}
+                        <div className="divide-y divide-gray-100">
+                          {monthSessions.map(session => (
+                            <div key={session.id}>
+                              <button onClick={() => setExpandedSession(expandedSession === session.id ? null : session.id)}
+                                className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition">
+                                <div className="flex items-center gap-2">
+                                  {expandedSession === session.id ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+                                  <div className="text-left">
+                                    <p className="text-sm font-medium text-gray-900">
+                                      {new Date(session.date + 'T00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                                    </p>
+                                    <p className="text-xs text-gray-500 capitalize">{session.status}{session.cancelReason ? ` — ${session.cancelReason}` : ''}</p>
+                                  </div>
                                 </div>
-                              );
-                            })
-                          }
+                                {session.status === 'closed' && (
+                                  <span className="text-sm font-semibold text-green-600">£{session.collected} <span className="text-xs font-normal text-gray-400">({session.attendeeCount}p)</span></span>
+                                )}
+                              </button>
+                              {expandedSession === session.id && (
+                                <div className="px-4 pb-3 bg-gray-50">
+                                  {session.status === 'cancelled' ? (
+                                    <button onClick={() => reopenSession(session.id)} className="text-sm text-green-600 font-medium">Reopen session</button>
+                                  ) : (
+                                    <div className="space-y-2">
+                                      {session.collected !== undefined && (
+                                        <p className="text-sm font-medium text-green-700">Transferred to bank: £{session.collected} ({session.attendeeCount} × £{Math.round(session.collected / session.attendeeCount)})</p>
+                                      )}
+                                      <div className="space-y-1">
+                                        {players.filter(p => session.playerAttendance[p.id]?.attended)
+                                          .sort((a, b) => a.name.localeCompare(b.name))
+                                          .map(p => {
+                                            const att = session.playerAttendance[p.id];
+                                            return (
+                                              <div key={p.id} className="flex justify-between items-center text-sm">
+                                                <span className="text-gray-800">{p.name}</span>
+                                                <span className={`text-xs px-2 py-0.5 rounded ${att.paid ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'}`}>
+                                                  {att.paid ? 'Paid' : 'Unpaid'}
+                                                </span>
+                                              </div>
+                                            );
+                                          })}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
                   </div>
-                )}
-              </div>
-            ))}
+                );
+              });
+            })()}
           </div>
         )}
 
