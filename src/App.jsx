@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Copy, ChevronDown, ChevronUp, Trash2, Plus, X } from 'lucide-react';
+import { Copy, ChevronDown, ChevronUp, Trash2, Plus, X, Home, Users, CalendarDays, Settings } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -321,7 +321,13 @@ const FNFApp = () => {
 
   const generateWhatsAppMessage = () => {
     const overdue = players.filter(p => computeBalance(p.ledger) < 0)
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => {
+        // Sort by oldest debt date first, then alphabetically
+        const oldestA = (a.ledger || []).filter(e => e.amount < 0).map(e => e.date).sort()[0] || '';
+        const oldestB = (b.ledger || []).filter(e => e.amount < 0).map(e => e.date).sort()[0] || '';
+        if (oldestA !== oldestB) return oldestA.localeCompare(oldestB);
+        return a.name.localeCompare(b.name);
+      });
     if (overdue.length === 0) return 'All payments up to date!';
     const lines = ['Friday Night Football - outstanding balances', ''];
     overdue.forEach(p => {
@@ -426,9 +432,12 @@ const FNFApp = () => {
 
       {/* Header */}
       <div className="bg-green-600 text-white sticky top-0 z-50 shadow-sm">
-        <div className="max-w-2xl mx-auto px-4 py-4">
-          <h1 className="text-2xl font-bold">FNF</h1>
-          <p className="text-green-100 text-sm">Friday Night Football</p>
+        <div className="max-w-2xl mx-auto px-4 py-2 flex items-center gap-3">
+          <img src="/apple-touch-icon.png" alt="FNF" className="w-9 h-9 rounded-lg" />
+          <div>
+            <h1 className="text-base font-bold leading-tight">FNF</h1>
+            <p className="text-green-100 text-xs leading-tight">Friday Night Football</p>
+          </div>
         </div>
       </div>
 
@@ -611,9 +620,23 @@ const FNFApp = () => {
                       <button className="flex-1 flex items-center justify-between text-left" onClick={() => setExpandedPlayer(isExpanded ? null : player.id)}>
                         <div>
                           <p className="font-semibold text-gray-900">{player.name}</p>
-                          <p className={`text-sm ${balance < 0 ? 'text-orange-600 font-medium' : balance > 0 ? 'text-blue-600 font-medium' : 'text-gray-500'}`}>
-                            {balance < 0 ? `Owes £${Math.abs(balance)}` : balance === 0 ? 'Up to date' : `Credit £${balance}`}
-                          </p>
+                          {balance < 0 ? (() => {
+                            const debtDates = (player.ledger || [])
+                              .filter(e => e.amount < 0)
+                              .sort((a, b) => a.date.localeCompare(b.date))
+                              .map(e => new Date(e.date + 'T00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }))
+                              .join(', ');
+                            return (
+                              <div>
+                                <p className="text-sm text-orange-600 font-medium">Owes £{Math.abs(balance)}</p>
+                                {debtDates && <p className="text-xs text-orange-400">{debtDates}</p>}
+                              </div>
+                            );
+                          })() : (
+                            <p className={`text-sm ${balance > 0 ? 'text-blue-600 font-medium' : 'text-gray-500'}`}>
+                              {balance === 0 ? 'Up to date' : `Credit £${balance}`}
+                            </p>
+                          )}
                         </div>
                         {isExpanded ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
                       </button>
@@ -1028,16 +1051,21 @@ const FNFApp = () => {
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg">
         <div className="max-w-2xl mx-auto flex justify-around">
           {[
-            { id: 'dashboard', label: 'Dashboard' },
-            { id: 'players', label: 'Players' },
-            { id: 'history', label: 'History' },
-            { id: 'settings', label: 'Settings' },
-          ].map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 py-3 text-sm font-medium transition border-t-2 ${activeTab === tab.id ? 'text-green-600 border-green-600' : 'text-gray-600 border-transparent hover:text-gray-900'}`}>
-              {tab.label}
-            </button>
-          ))}
+            { id: 'dashboard', label: 'Home', icon: Home },
+            { id: 'players', label: 'Players', icon: Users },
+            { id: 'history', label: 'History', icon: CalendarDays },
+            { id: 'settings', label: 'Settings', icon: Settings },
+          ].map(tab => {
+            const active = activeTab === tab.id;
+            const Icon = tab.icon;
+            return (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                className={`flex-1 flex flex-col items-center gap-1 py-2 transition ${active ? 'bg-green-50' : 'hover:bg-gray-50'}`}>
+                <Icon size={22} className={active ? 'text-green-600' : 'text-gray-400'} />
+                <span className={`text-xs font-medium ${active ? 'text-green-600' : 'text-gray-400'}`}>{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
