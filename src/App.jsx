@@ -566,6 +566,18 @@ const FNFApp = () => {
                       <div className="border-t border-gray-100 bg-gray-50 p-4 space-y-3">
                         {/* Edit name */}
                         <EditName player={player} onSave={(name) => setPlayers(players.map(p => p.id === player.id ? { ...p, name } : p))} />
+                        {/* Quick paid me back button */}
+                        {balance < 0 && entryForm?.playerId !== player.id && (
+                          <button
+                            onClick={() => {
+                              setEntryForm({ playerId: player.id });
+                              setEntryDraft({ date: today, amount: Math.abs(balance).toString(), label: 'Paid me back', type: 'credit' });
+                            }}
+                            className="w-full bg-blue-600 text-white py-2 rounded font-semibold text-sm hover:bg-blue-700 transition"
+                          >
+                            Paid me back — £{Math.abs(balance)}
+                          </button>
+                        )}
                         {/* Ledger entries */}
                         {(player.ledger || []).length === 0 ? (
                           <p className="text-sm text-gray-400">No entries yet</p>
@@ -789,19 +801,21 @@ const FNFApp = () => {
                           </div>
                         )}
                         <div className="space-y-2 text-sm">
-                          {players.map(p => {
-                            const att = session.playerAttendance[p.id];
-                            if (!att) return null;
-                            return (
-                              <div key={p.id} className="flex justify-between items-center">
-                                <span className="text-gray-900">{p.name}</span>
-                                <div className="flex gap-2">
-                                  {att.attended && <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Played</span>}
-                                  {att.attended && att.paid && <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Paid</span>}
+                          {players
+                            .filter(p => session.playerAttendance[p.id]?.attended)
+                            .sort((a, b) => a.name.localeCompare(b.name))
+                            .map(p => {
+                              const att = session.playerAttendance[p.id];
+                              return (
+                                <div key={p.id} className="flex justify-between items-center">
+                                  <span className="text-gray-900">{p.name}</span>
+                                  <span className={`text-xs px-2 py-1 rounded ${att.paid ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'}`}>
+                                    {att.paid ? 'Paid' : 'Unpaid'}
+                                  </span>
                                 </div>
-                              </div>
-                            );
-                          })}
+                              );
+                            })
+                          }
                         </div>
                       </div>
                     )}
