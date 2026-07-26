@@ -44,7 +44,8 @@ const FNFApp = () => {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
   const [invoicePayments, setInvoicePayments] = useState([]);
-  const [confirmingPayment, setConfirmingPayment] = useState(null); // { month, amount }
+  const [confirmingPayment, setConfirmingPayment] = useState(null);
+  const [cancelModal, setCancelModal] = useState(null); // { sessionId }
   const [editingSessionDate, setEditingSessionDate] = useState(false);
   const [newSessionDate, setNewSessionDate] = useState('');
   // Manual entry form state
@@ -184,8 +185,13 @@ const FNFApp = () => {
     }));
   };
 
-  const cancelSession = (sessionId) => {
-    setSessions(sessions.map(s => s.id === sessionId ? { ...s, status: 'cancelled' } : s));
+  const cancelSession = (sessionId, reason) => {
+    setSessions(sessions.map(s => s.id === sessionId ? { ...s, status: 'cancelled', cancelReason: reason } : s));
+    setCancelModal(null);
+  };
+
+  const reopenSession = (sessionId) => {
+    setSessions(sessions.map(s => s.id === sessionId ? { ...s, status: 'open', cancelReason: null } : s));
   };
 
   // Add a manual ledger entry to a player
@@ -441,7 +447,7 @@ const FNFApp = () => {
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => closeSession(currentSession.id)} className="flex-1 bg-green-600 text-white py-2 rounded font-semibold hover:bg-green-700 transition">Close Week</button>
-                  <button onClick={() => cancelSession(currentSession.id)} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded font-semibold hover:bg-gray-400 transition">Cancel</button>
+                  <button onClick={() => setCancelModal({ sessionId: currentSession.id })} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded font-semibold hover:bg-gray-400 transition">Cancel Week</button>
                 </div>
               </div>
             )}
@@ -721,7 +727,15 @@ const FNFApp = () => {
                 {expandedSession === session.id && (
                   <div className="bg-gray-50 p-4 border-t border-gray-200">
                     {session.status === 'cancelled' ? (
-                      <p className="text-sm text-gray-600">This session was cancelled</p>
+                      <div className="space-y-2">
+                        <p className="text-sm text-gray-600">
+                          Cancelled{session.cancelReason ? ` — ${session.cancelReason}` : ''}
+                        </p>
+                        <button
+                          onClick={() => reopenSession(session.id)}
+                          className="text-sm text-green-600 font-medium hover:text-green-700"
+                        >Reopen session</button>
+                      </div>
                     ) : (
                       <div className="space-y-3">
                         {session.collected !== undefined && (
@@ -809,6 +823,33 @@ const FNFApp = () => {
           </div>
         )}
       </div>
+
+      {/* Cancel Week Modal */}
+      {cancelModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Cancel this week?</h2>
+            <p className="text-sm text-gray-500 mb-5">Who cancelled?</p>
+            <div className="space-y-3 mb-4">
+              <button
+                onClick={() => cancelSession(cancelModal.sessionId, 'Cancelled by leisure centre')}
+                className="w-full bg-orange-50 border border-orange-200 text-orange-800 py-3 rounded-lg font-medium text-left px-4 hover:bg-orange-100 transition"
+              >
+                Leisure centre
+                <p className="text-xs font-normal text-orange-600 mt-0.5">Pitch unavailable — can dispute invoice</p>
+              </button>
+              <button
+                onClick={() => cancelSession(cancelModal.sessionId, 'Cancelled by us')}
+                className="w-full bg-gray-50 border border-gray-200 text-gray-800 py-3 rounded-lg font-medium text-left px-4 hover:bg-gray-100 transition"
+              >
+                Us
+                <p className="text-xs font-normal text-gray-500 mt-0.5">Not enough players or other reason</p>
+              </button>
+            </div>
+            <button onClick={() => setCancelModal(null)} className="w-full text-sm text-gray-400 py-2 hover:text-gray-600">Go back</button>
+          </div>
+        </div>
+      )}
 
       {/* Close Week Modal */}
       {closeModal && (
