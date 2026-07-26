@@ -5,6 +5,48 @@ import { Copy, ChevronDown, ChevronUp, Trash2, Plus, X } from 'lucide-react';
 const computeBalance = (ledger = []) =>
   ledger.reduce((sum, e) => sum + e.amount, 0);
 
+const BankBalanceEditor = ({ bankBalance, onSave }) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [saved, setSaved] = useState(false);
+  const save = () => {
+    const val = parseFloat(draft);
+    if (!isNaN(val)) {
+      onSave(val);
+      setSaved(true);
+      setTimeout(() => { setSaved(false); setEditing(false); }, 1000);
+    }
+  };
+  if (!editing) return (
+    <div className="bg-white p-4 rounded-lg shadow-sm flex items-center justify-between">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Bank Balance</p>
+        <p className="text-2xl font-bold text-gray-900">£{bankBalance}</p>
+      </div>
+      <button onClick={() => { setDraft(bankBalance.toString()); setEditing(true); }}
+        className="text-sm text-green-600 font-medium hover:text-green-700">Edit</button>
+    </div>
+  );
+  return (
+    <div className="bg-white p-4 rounded-lg shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Bank Balance</p>
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">£</span>
+          <input autoFocus type="number" step="1" value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && save()}
+            className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded text-gray-900 text-lg font-medium" />
+        </div>
+        <button onClick={save} className="bg-green-600 text-white px-4 py-2 rounded font-semibold hover:bg-green-700">
+          {saved ? 'Saved!' : 'Save'}
+        </button>
+        <button onClick={() => setEditing(false)} className="bg-gray-200 text-gray-600 px-3 py-2 rounded font-semibold">Cancel</button>
+      </div>
+    </div>
+  );
+};
+
 const EditName = ({ player, onSave }) => {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(player.name);
@@ -773,6 +815,9 @@ const FNFApp = () => {
         {/* Settings Tab */}
         {activeTab === 'settings' && (
           <div className="space-y-4">
+            {/* Bank balance override */}
+            <BankBalanceEditor bankBalance={bankBalance} onSave={setBankBalance} />
+
             {/* WhatsApp message */}
             <div className="bg-white p-4 rounded-lg shadow-sm">
               <div className="flex items-center justify-between mb-3">
