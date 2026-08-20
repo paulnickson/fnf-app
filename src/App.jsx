@@ -11,6 +11,10 @@ const supabase = createClient(
 const computeBalance = (ledger = []) =>
   ledger.reduce((sum, e) => sum + e.amount, 0);
 
+// Has this player ever had a debt written off?
+const hasWriteOffHistory = (ledger = []) =>
+  ledger.some(e => e.type === 'writeoff');
+
 const BankBalanceEditor = ({ bankBalance, onSave }) => {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -295,7 +299,13 @@ const FNFApp = () => {
       : Math.abs(parseFloat(entryDraft.amount));
     if (!entryDraft.date || isNaN(amount) || !entryDraft.label.trim()) return;
 
-    const entry = { id: Date.now().toString(), date: entryDraft.date, amount, label: entryDraft.label.trim() };
+    const entry = {
+      id: Date.now().toString(),
+      date: entryDraft.date,
+      amount,
+      label: entryDraft.label.trim(),
+      ...(entryDraft.type === 'writeoff' ? { type: 'writeoff' } : {}),
+    };
     setPlayers(players.map(p =>
       p.id === entryForm.playerId
         ? { ...p, ledger: [...(p.ledger || []), entry].sort((a, b) => a.date.localeCompare(b.date)) }
@@ -613,13 +623,21 @@ const FNFApp = () => {
               .map(player => {
                 const balance = computeBalance(player.ledger);
                 const isExpanded = expandedPlayer === player.id;
+                const writtenOff = hasWriteOffHistory(player.ledger);
                 return (
                   <div key={player.id} className="bg-white rounded-lg shadow-sm overflow-hidden">
                     {/* Player row */}
                     <div className="flex items-center p-4">
                       <button className="flex-1 flex items-center justify-between text-left" onClick={() => setExpandedPlayer(isExpanded ? null : player.id)}>
                         <div>
-                          <p className="font-semibold text-gray-900">{player.name}</p>
+                          <p className="font-semibold text-gray-900 flex items-center gap-1.5 flex-wrap">
+                            {player.name}
+                            {writtenOff && (
+                              <span className="text-[10px] leading-none bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
+                                ⚠ write-off history
+                              </span>
+                            )}
+                          </p>
                           {balance < 0 ? (() => {
                             const debtDates = (player.ledger || [])
                               .filter(e => e.amount < 0)
@@ -650,17 +668,28 @@ const FNFApp = () => {
                       <div className="border-t border-gray-100 bg-gray-50 p-4 space-y-3">
                         {/* Edit name */}
                         <EditName player={player} onSave={(name) => setPlayers(players.map(p => p.id === player.id ? { ...p, name } : p))} />
-                        {/* Quick paid me back button */}
+                        {/* Quick action buttons: paid me back / write off */}
                         {balance < 0 && entryForm?.playerId !== player.id && (
-                          <button
-                            onClick={() => {
-                              setEntryForm({ playerId: player.id });
-                              setEntryDraft({ date: today, amount: Math.abs(balance).toString(), label: 'Paid me back', type: 'credit' });
-                            }}
-                            className="w-full bg-blue-600 text-white py-2 rounded font-semibold text-sm hover:bg-blue-700 transition"
-                          >
-                            Paid me back — £{Math.abs(balance)}
-                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                setEntryForm({ playerId: player.id });
+                                setEntryDraft({ date: today, amount: Math.abs(balance).toString(), label: 'Paid me back', type: 'credit' });
+                              }}
+                              className="flex-1 bg-blue-600 text-white py-2 rounded font-semibold text-sm hover:bg-blue-700 transition"
+                            >
+                              Paid me back — £{Math.abs(balance)}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEntryForm({ playerId: player.id });
+                                setEntryDraft({ date: today, amount: Math.abs(balance).toString(), label: 'Debt written off', type: 'writeoff' });
+                              }}
+                              className="flex-1 bg-amber-500 text-white py-2 rounded font-semibold text-sm hover:bg-amber-600 transition"
+                            >
+                              Write off — £{Math.abs(balance)}
+                            </button>
+                          </div>
                         )}
                         {/* Ledger entries */}
                         {(player.ledger || []).length === 0 ? (
@@ -670,15 +699,21 @@ const FNFApp = () => {
                             {[...player.ledger]
                               .sort((a, b) => a.date.localeCompare(b.date))
                               .map(entry => (
-                                <div key={entry.id} className="flex items-center justify-between bg-white rounded p-2 border border-gray-200">
+                                <div key={entry.id} className={`flex items-center justify-between rounded p-2 border ${entry.type === 'writeoff' ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}>
                                   <div>
                                     <p className="text-sm font-medium text-gray-800">{entry.label}</p>
                                     <p className="text-xs text-gray-400">{formatDate(entry.date)}</p>
                                   </div>
                                   <div className="flex items-center gap-2">
-                                    <span className={`text-sm font-semibold ${entry.amount < 0 ? 'text-orange-600' : 'text-blue-600'}`}>
-                                      {entry.amount < 0 ? '−' : '+'}£{Math.abs(entry.amount)}
-                                    </span>
+                                    {entry.type === 'writeoff' ? (
+                                      <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-medium whitespace-nowrap">
+                                        Written off · £{Math.abs(entry.amount)}
+                                      </span>
+                                    ) : (
+                                      <span className={`text-sm font-semibold ${entry.amount < 0 ? 'text-orange-600' : 'text-blue-600'}`}>
+                                        {entry.amount < 0 ? '−' : '+'}£{Math.abs(entry.amount)}
+                                      </span>
+                                    )}
                                     <button onClick={() => deleteEntry(player.id, entry.id)} className="text-gray-300 hover:text-red-500 transition">
                                       <X size={14} />
                                     </button>
@@ -701,6 +736,10 @@ const FNFApp = () => {
                                 onClick={() => setEntryDraft({ ...entryDraft, type: 'credit' })}
                                 className={`flex-1 py-1 rounded text-sm font-medium ${entryDraft.type === 'credit' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-600'}`}
                               >Credit (paid)</button>
+                              <button
+                                onClick={() => setEntryDraft({ ...entryDraft, type: 'writeoff' })}
+                                className={`flex-1 py-1 rounded text-sm font-medium ${entryDraft.type === 'writeoff' ? 'bg-amber-500 text-white' : 'bg-gray-200 text-gray-600'}`}
+                              >Write off</button>
                             </div>
                             <input
                               type="date" value={entryDraft.date}
