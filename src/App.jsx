@@ -15,6 +15,23 @@ const computeBalance = (ledger = []) =>
 const hasWriteOffHistory = (ledger = []) =>
   ledger.some(e => e.type === 'writeoff');
 
+// Work out which individual debt entries are still (fully or partially) unpaid,
+// by applying all credits/write-offs against the oldest debts first.
+const getOutstandingDebts = (ledger = []) => {
+  const debts = [...ledger]
+    .filter(e => e.amount < 0)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map(e => ({ ...e, remaining: Math.abs(e.amount) }));
+  let creditPool = ledger.filter(e => e.amount > 0).reduce((sum, e) => sum + e.amount, 0);
+  for (const debt of debts) {
+    if (creditPool <= 0) break;
+    const applied = Math.min(debt.remaining, creditPool);
+    debt.remaining -= applied;
+    creditPool -= applied;
+  }
+  return debts.filter(d => d.remaining > 0);
+};
+
 const BankBalanceEditor = ({ bankBalance, onSave }) => {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -332,19 +349,17 @@ const FNFApp = () => {
   const generateWhatsAppMessage = () => {
     const overdue = players.filter(p => computeBalance(p.ledger) < 0)
       .sort((a, b) => {
-        // Sort by oldest debt date first, then alphabetically
-        const oldestA = (a.ledger || []).filter(e => e.amount < 0).map(e => e.date).sort()[0] || '';
-        const oldestB = (b.ledger || []).filter(e => e.amount < 0).map(e => e.date).sort()[0] || '';
+        // Sort by oldest outstanding debt date first, then alphabetically
+        const oldestA = getOutstandingDebts(a.ledger)[0]?.date || '';
+        const oldestB = getOutstandingDebts(b.ledger)[0]?.date || '';
         if (oldestA !== oldestB) return oldestA.localeCompare(oldestB);
         return a.name.localeCompare(b.name);
       });
     if (overdue.length === 0) return 'All payments up to date!';
     const lines = ['Friday Night Football - outstanding balances', ''];
     overdue.forEach(p => {
-      const debts = (p.ledger || []).filter(e => e.amount < 0);
       const total = Math.abs(computeBalance(p.ledger));
-      const dates = debts
-        .sort((a, b) => a.date.localeCompare(b.date))
+      const dates = getOutstandingDebts(p.ledger)
         .map(e => new Date(e.date + 'T00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }))
         .join(', ');
       lines.push(`${p.name} - £${total}${dates ? ` (${dates})` : ''}`);
@@ -639,9 +654,7 @@ const FNFApp = () => {
                             )}
                           </p>
                           {balance < 0 ? (() => {
-                            const debtDates = (player.ledger || [])
-                              .filter(e => e.amount < 0)
-                              .sort((a, b) => a.date.localeCompare(b.date))
+                            const debtDates = getOutstandingDebts(player.ledger)
                               .map(e => new Date(e.date + 'T00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }))
                               .join(', ');
                             return (
