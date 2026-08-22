@@ -118,6 +118,7 @@ const FNFApp = () => {
   const [cancelModal, setCancelModal] = useState(null); // { sessionId }
   const [editingSessionDate, setEditingSessionDate] = useState(false);
   const [newSessionDate, setNewSessionDate] = useState('');
+  const [showAllWeeks, setShowAllWeeks] = useState(false);
   // Manual entry form state
   const [entryForm, setEntryForm] = useState(null); // { playerId }
   const [entryDraft, setEntryDraft] = useState({ date: '', amount: '', label: '', type: 'debt' });
@@ -804,12 +805,103 @@ const FNFApp = () => {
         {/* History Tab */}
         {activeTab === 'history' && (
           <div className="space-y-3">
+
+            {/* Next-month invoice preview — always visible, updates live as the current month's cancellations come in */}
+            {(() => {
+              const now = new Date();
+              const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+              const nextYear = nextMonthDate.getFullYear();
+              const nextMonthIdx = nextMonthDate.getMonth(); // 0-indexed
+              const nextMonthName = nextMonthDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+              const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+              const currentMonthName = now.toLocaleDateString('en-GB', { month: 'long' });
+              const cancelledSoFar = sessions.filter(s => s.status === 'cancelled' && s.date.startsWith(currentMonthKey));
+              const nextFridays = getFridaysInMonth(nextYear, nextMonthIdx);
+              const fullCost = nextFridays.length * settings.pitchCost;
+              const discount = cancelledSoFar.length * settings.pitchCost;
+              const dueSoFar = fullCost - discount;
+
+              return (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 mb-2">
+                    {nextMonthName} invoice (preview)
+                  </p>
+                  <div className="text-sm space-y-1">
+                    <div className="flex justify-between text-gray-700">
+                      <span>{nextFridays.length} Fridays × £{settings.pitchCost}</span>
+                      <span>£{fullCost}</span>
+                    </div>
+                    {cancelledSoFar.length > 0 && (
+                      <div className="flex justify-between text-orange-600">
+                        <span>{cancelledSoFar.length} cancellation{cancelledSoFar.length > 1 ? 's' : ''} so far in {currentMonthName}</span>
+                        <span>−£{discount}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-semibold text-gray-900 border-t border-blue-200 pt-1">
+                      <span>Estimated due</span>
+                      <span>£{dueSoFar}</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-blue-600 mt-2">
+                    Updates automatically as {currentMonthName} progresses — more cancellations this month will reduce this further.
+                  </p>
+                </div>
+              );
+            })()}
+
             {/* Create Week */}
             <div className="bg-white p-3 rounded-lg shadow-sm flex items-center gap-2">
               <input type="date" defaultValue={nextFridayDate()} onChange={(e) => setNewSessionDate(e.target.value)}
                 className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm" />
               <button onClick={() => createNewSession(newSessionDate || nextFridayDate())}
                 className="bg-green-600 text-white px-4 py-2 rounded font-semibold hover:bg-green-700 transition text-sm whitespace-nowrap">Create Week</button>
+            </div>
+
+            {/* All Weeks — a flat, chronological list of every session including any still 'open'.
+                Open sessions never appear in the month cards below, so this is the only place
+                a week that got left open (never closed or cancelled) will show up. */}
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+              <button onClick={() => setShowAllWeeks(!showAllWeeks)}
+                className="w-full p-3 flex items-center justify-between hover:bg-gray-50 transition">
+                <span className="text-sm font-semibold text-gray-700">All Weeks ({sessions.length})</span>
+                {showAllWeeks ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+              </button>
+              {showAllWeeks && (
+                <div className="divide-y divide-gray-100 border-t border-gray-100">
+                  {sessions.length === 0 ? (
+                    <p className="text-center text-gray-400 py-4 text-sm">No weeks yet</p>
+                  ) : (
+                    [...sessions]
+                      .sort((a, b) => b.date.localeCompare(a.date))
+                      .map(session => {
+                        const statusLabel = session.status === 'open' ? 'Open' : session.status === 'closed' ? 'Played' : 'Cancelled';
+                        const statusColor = session.status === 'open'
+                          ? 'bg-blue-100 text-blue-700'
+                          : session.status === 'closed'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-gray-200 text-gray-600';
+                        return (
+                          <div key={session.id} className="px-4 py-2.5 flex items-center justify-between text-sm">
+                            <div>
+                              <span className="font-medium text-gray-900">
+                                {new Date(session.date + 'T00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                              </span>
+                              {session.cancelReason && (
+                                <span className="text-xs text-gray-400 ml-2">({session.cancelReason})</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {session.status === 'closed' && (
+                                <span className="text-xs text-gray-400">£{session.collected} ({session.attendeeCount}p)</span>
+                              )}
+                              <span className={`text-xs px-2 py-0.5 rounded font-medium whitespace-nowrap ${statusColor}`}>{statusLabel}</span>
+                            </div>
+                          </div>
+                        );
+                      })
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Month cards */}
