@@ -119,6 +119,7 @@ const FNFApp = () => {
   const [editingSessionDate, setEditingSessionDate] = useState(false);
   const [newSessionDate, setNewSessionDate] = useState('');
   const [showAllWeeks, setShowAllWeeks] = useState(false);
+  const [deletingSession, setDeletingSession] = useState(null);
   // Manual entry form state
   const [entryForm, setEntryForm] = useState(null); // { playerId }
   const [entryDraft, setEntryDraft] = useState({ date: '', amount: '', label: '', type: 'debt' });
@@ -308,6 +309,14 @@ const FNFApp = () => {
 
   const reopenSession = (sessionId) => {
     setSessions(sessions.map(s => s.id === sessionId ? { ...s, status: 'open', cancelReason: null } : s));
+  };
+
+  // Permanently remove a session (e.g. an accidental duplicate). Does NOT reverse any
+  // bank balance transfer or player ledger entries that closing it may have created —
+  // check those manually first if the session had money collected.
+  const deleteSession = (sessionId) => {
+    setSessions(sessions.filter(s => s.id !== sessionId));
+    setDeletingSession(null);
   };
 
   // Add a manual ledger entry to a player
@@ -880,22 +889,43 @@ const FNFApp = () => {
                           : session.status === 'closed'
                           ? 'bg-green-100 text-green-700'
                           : 'bg-gray-200 text-gray-600';
+                        const isConfirmingDelete = deletingSession === session.id;
                         return (
-                          <div key={session.id} className="px-4 py-2.5 flex items-center justify-between text-sm">
-                            <div>
-                              <span className="font-medium text-gray-900">
-                                {new Date(session.date + 'T00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
-                              </span>
-                              {session.cancelReason && (
-                                <span className="text-xs text-gray-400 ml-2">({session.cancelReason})</span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {session.status === 'closed' && (
-                                <span className="text-xs text-gray-400">£{session.collected} ({session.attendeeCount}p)</span>
-                              )}
-                              <span className={`text-xs px-2 py-0.5 rounded font-medium whitespace-nowrap ${statusColor}`}>{statusLabel}</span>
-                            </div>
+                          <div key={session.id} className="px-4 py-2.5 text-sm">
+                            {isConfirmingDelete ? (
+                              <div className="flex items-center justify-between">
+                                <span className="text-gray-600">
+                                  Delete {new Date(session.date + 'T00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}?
+                                  {session.status === 'closed' && session.collected > 0 && (
+                                    <span className="text-orange-500"> Won't reverse the £{session.collected} bank transfer.</span>
+                                  )}
+                                </span>
+                                <div className="flex gap-2 flex-shrink-0 ml-2">
+                                  <button onClick={() => deleteSession(session.id)} className="text-xs bg-red-500 text-white px-2 py-1 rounded font-semibold">Delete</button>
+                                  <button onClick={() => setDeletingSession(null)} className="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded font-semibold">Cancel</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <span className="font-medium text-gray-900">
+                                    {new Date(session.date + 'T00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                                  </span>
+                                  {session.cancelReason && (
+                                    <span className="text-xs text-gray-400 ml-2">({session.cancelReason})</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {session.status === 'closed' && (
+                                    <span className="text-xs text-gray-400">£{session.collected} ({session.attendeeCount}p)</span>
+                                  )}
+                                  <span className={`text-xs px-2 py-0.5 rounded font-medium whitespace-nowrap ${statusColor}`}>{statusLabel}</span>
+                                  <button onClick={() => setDeletingSession(session.id)} className="text-gray-300 hover:text-red-500 transition">
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         );
                       })
