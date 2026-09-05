@@ -114,6 +114,7 @@ const FNFApp = () => {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
   const [invoicePayments, setInvoicePayments] = useState([]);
+  const [invoiceNumbers, setInvoiceNumbers] = useState({}); // { 'YYYY-MM': 'invoice number string' }
   const [confirmingPayment, setConfirmingPayment] = useState(null);
   const [cancelModal, setCancelModal] = useState(null); // { sessionId }
   const [editingSessionDate, setEditingSessionDate] = useState(false);
@@ -155,6 +156,7 @@ const FNFApp = () => {
           setBankBalance(d.bankBalance || 0);
           if (d.settings) { setSettings(d.settings); setSettingsDraft(d.settings); }
           if (d.invoicePayments) setInvoicePayments(d.invoicePayments);
+          if (d.invoiceNumbers) setInvoiceNumbers(d.invoiceNumbers);
         } else {
           // Fall back to localStorage
           const saved = localStorage.getItem('fnfData');
@@ -166,6 +168,7 @@ const FNFApp = () => {
             setBankBalance(d.bankBalance || 0);
             if (d.settings) { setSettings(d.settings); setSettingsDraft(d.settings); }
             if (d.invoicePayments) setInvoicePayments(d.invoicePayments);
+            if (d.invoiceNumbers) setInvoiceNumbers(d.invoiceNumbers);
           } else {
             initializeDemo();
           }
@@ -181,6 +184,7 @@ const FNFApp = () => {
           setBankBalance(d.bankBalance || 0);
           if (d.settings) { setSettings(d.settings); setSettingsDraft(d.settings); }
           if (d.invoicePayments) setInvoicePayments(d.invoicePayments);
+          if (d.invoiceNumbers) setInvoiceNumbers(d.invoiceNumbers);
         } else {
           initializeDemo();
         }
@@ -195,12 +199,12 @@ const FNFApp = () => {
   // Save to Supabase + localStorage whenever state changes
   useEffect(() => {
     if (!initialized.current) return;
-    const state = { players, sessions, bankBalance, settings, invoicePayments };
+    const state = { players, sessions, bankBalance, settings, invoicePayments, invoiceNumbers };
     localStorage.setItem('fnfData', JSON.stringify(state));
     supabase.from('app_data').upsert({ key: 'state', value: state, updated_at: new Date().toISOString() }).then(({ error }) => {
       if (error) console.error('Supabase save error:', error);
     });
-  }, [players, sessions, bankBalance, settings, invoicePayments]);
+  }, [players, sessions, bankBalance, settings, invoicePayments, invoiceNumbers]);
 
   const initializeDemo = () => {
     const lastFriday = new Date();
@@ -936,11 +940,27 @@ const FNFApp = () => {
 
             {/* Month cards */}
             {(() => {
-              // Collect all months from past sessions + invoice payments
-              const monthSet = new Set();
-              pastSessions.forEach(s => monthSet.add(s.date.slice(0, 7)));
+              // Build a continuous run of months from the earliest known month through
+              // the current month, so an invoice card shows as soon as a month starts —
+              // even before any Friday session has been created for it.
+              const now = new Date();
+              const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+              const monthSet = new Set([currentMonthKey]);
+              sessions.forEach(s => monthSet.add(s.date.slice(0, 7)));
               invoicePayments.forEach(p => monthSet.add(p.month));
-              const months = [...monthSet].sort((a, b) => b.localeCompare(a)); // newest first
+              Object.keys(invoiceNumbers).forEach(m => monthSet.add(m));
+
+              const knownMonths = [...monthSet].sort();
+              const [ey, emStart] = knownMonths[0].split('-').map(Number);
+              const [cy, cm] = currentMonthKey.split('-').map(Number);
+              const months = [];
+              let y = ey, m = emStart;
+              while (y < cy || (y === cy && m <= cm)) {
+                months.push(`${y}-${String(m).padStart(2, '0')}`);
+                m++;
+                if (m > 12) { m = 1; y++; }
+              }
+              months.reverse(); // newest first
 
               if (months.length === 0) return <p className="text-center text-gray-400 py-8 text-sm">No history yet</p>;
 
@@ -979,15 +999,20 @@ const FNFApp = () => {
                         <div className="text-left">
                           <p className="font-semibold text-gray-900">{monthName}</p>
                           <p className="text-xs text-gray-500 mt-0.5">
-                            {monthSessions.filter(s => s.status === 'closed').length} played
-                            {monthSessions.filter(s => s.status === 'cancelled').length > 0 && ` · ${monthSessions.filter(s => s.status === 'cancelled').length} cancelled`}
+                            {monthSessions.length === 0
+                              ? 'No sessions yet'
+                              : <>
+                                  {monthSessions.filter(s => s.status === 'closed').length} played
+                                  {monthSessions.filter(s => s.status === 'cancelled').length > 0 && ` · ${monthSessions.filter(s => s.status === 'cancelled').length} cancelled`}
+                                </>
+                            }
                           </p>
                         </div>
                       </div>
                       <div className="text-right">
                         {invoicePayment
                           ? <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded font-medium">Invoice paid £{invoicePayment.amount}</span>
-                          : <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded">Invoice unpaid</span>
+                          : <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded font-medium">Invoice unpaid</span>
                         }
                       </div>
                     </button>
@@ -998,6 +1023,18 @@ const FNFApp = () => {
                         {/* Invoice section */}
                         <div className="p-4 bg-gray-50 space-y-2 border-b border-gray-100">
                           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Invoice</p>
+
+                          <div className="flex items-center gap-2 mb-1">
+                            <label className="text-xs text-gray-500 whitespace-nowrap">Invoice #</label>
+                            <input
+                              type="text"
+                              value={invoiceNumbers[monthKey] || ''}
+                              onChange={(e) => setInvoiceNumbers(prev => ({ ...prev, [monthKey]: e.target.value }))}
+                              placeholder="e.g. 15568"
+                              className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm bg-white"
+                            />
+                          </div>
+
                           <div className="text-sm space-y-1">
                             <div className="flex justify-between text-gray-700">
                               <span>{fridays.length} Fridays × £{settings.pitchCost}</span>
@@ -1012,6 +1049,12 @@ const FNFApp = () => {
                             <div className="flex justify-between font-semibold text-gray-900 border-t border-gray-200 pt-1">
                               <span>Total due</span>
                               <span>£{invoiceAmount}</span>
+                            </div>
+                            <div className="flex justify-between items-center pt-1">
+                              <span className="text-xs text-gray-500">Status</span>
+                              <span className={`text-xs px-2 py-0.5 rounded font-medium ${invoicePayment ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'}`}>
+                                {invoicePayment ? 'Paid' : 'Unpaid'}
+                              </span>
                             </div>
                           </div>
 
